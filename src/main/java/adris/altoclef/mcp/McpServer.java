@@ -53,9 +53,12 @@ public class McpServer {
     }
 
     /**
-     * @param authToken required as "Authorization: Bearer &lt;authToken&gt;" on every request
-     *                  (TODOS.md C7.3 — this server binds 0.0.0.0 with no other access control).
+     * @param authToken required as "Authorization: Bearer &lt;authToken&gt;" on every request.
      *                  Must be non-empty: an empty token would accept every request unchecked.
+     *                  BINDING (audit fix 2026-10-04): the server binds the address passed to
+     *                  {@link #start} — Settings.mcpBindAddress, default 127.0.0.1. It used to
+     *                  hard-bind 0.0.0.0 with the bearer token as the only access control; set
+     *                  mcpBindAddress="0.0.0.0" explicitly if LAN agents are wanted back.
      */
     public McpServer(Py4jEntryPoint api, String authToken) {
         if (authToken == null || authToken.isEmpty()) {
@@ -67,10 +70,16 @@ public class McpServer {
     }
 
     public void start(int port) throws IOException {
-        http = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+        start(port, "127.0.0.1");
+    }
+
+    public void start(int port, String bindAddress) throws IOException {
+        http = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
         http.createContext("/mcp", this::handle);
         http.createContext("/", this::handle); // tolerate clients that POST to root
-        http.setExecutor(Executors.newCachedThreadPool());
+        // Bounded pool (audit fix 2026-10-04): was newCachedThreadPool — an unbounded
+        // growth path on a network listener reachable from a browser tab.
+        http.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
         http.start();
     }
 

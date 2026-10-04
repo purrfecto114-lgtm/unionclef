@@ -624,19 +624,24 @@ public class Settings implements IFailableConfigFile {
 
     /**
      * MCP server (Model Context Protocol over Streamable HTTP) hosted directly
-     * by the mod, bound to 0.0.0.0 so a cognitive agent (Claude) can drive the
-     * bot over the LAN — http://&lt;lan-ip&gt;:mcpPort/mcp. Wraps the same
-     * Py4jEntryPoint levers (single source). Disable to close the LAN port.
+     * by the mod, so a cognitive agent (Claude) can drive the bot. BINDING
+     * (audit fix 2026-10-04): binds {@link #mcpBindAddress} — default
+     * 127.0.0.1 (loopback only). Set "0.0.0.0" to reopen the old LAN behavior
+     * (http://&lt;lan-ip&gt;:mcpPort/mcp). Wraps the same Py4jEntryPoint levers
+     * (single source). Disable to close the port.
      */
     private boolean mcpEnabled = true;
     private int mcpPort = 25350;
+    /** Address the MCP HTTP server binds. Loopback default; "0.0.0.0" = all interfaces. */
+    private String mcpBindAddress = "127.0.0.1";
     /**
-     * TODOS.md C7.3: the MCP server binds 0.0.0.0 with no authentication and wildcard CORS —
-     * anyone on the LAN could send commands. Empty means "not generated yet"; AltoClef
+     * The MCP server authenticates every request with the bearer token below (constant-time
+     * compare). Empty means "not generated yet"; AltoClef
      * generates a random token on first MCP start and saves it here, then requires it as
      * "Authorization: Bearer &lt;token&gt;" on every request. Read it from this settings file
      * (or the startup log) to configure an MCP client. Clearing this field forces a fresh
-     * token to be generated on the next start.
+     * token to be generated on the next start. NOTE: there is no transport encryption —
+     * that is another reason the default bind is loopback now.
      */
     private String mcpAuthToken = "";
 
@@ -650,6 +655,14 @@ public class Settings implements IFailableConfigFile {
 
     public void setMcpPort(int port) {
         this.mcpPort = port;
+    }
+
+    public String getMcpBindAddress() {
+        return mcpBindAddress == null || mcpBindAddress.isBlank() ? "127.0.0.1" : mcpBindAddress;
+    }
+
+    public void setMcpBindAddress(String address) {
+        this.mcpBindAddress = address;
     }
 
     public String getMcpAuthToken() {

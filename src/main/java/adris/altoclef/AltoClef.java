@@ -174,6 +174,11 @@ public class AltoClef implements ModInitializer {
         final int originalPort = port;
         final int MAX_ATTEMPTS = 20;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            // py4j 0.10.9.7, six-arg constructor: the last parameter is the custom-commands
+            // list (null = none), NOT a bind address. The gateway's Java-side listener binds
+            // 127.0.0.1 by default (GatewayServer.defaultAddress(); confirmed against the
+            // py4j javadoc/FAQ, 2026-10-04 — the 2026-10-03 audit's "binds all interfaces"
+            // reading of this line was wrong). Only McpServer ever bound 0.0.0.0.
             _gatewayServer = new GatewayServer(
                     _py4jEntryPoint,
                     port,
@@ -223,10 +228,16 @@ public class AltoClef implements ModInitializer {
             }
             _mcpServer = new adris.altoclef.mcp.McpServer(_py4jEntryPoint, token);
             int mport = getModSettings().getMcpPort();
-            _mcpServer.start(mport);
-            Debug.logMessage("MCP server started on 0.0.0.0:" + mport + " (http://<lan-ip>:" + mport
-                    + "/mcp) — auth token in " + adris.altoclef.Settings.SETTINGS_PATH
-                    + " (mcpAuthToken), required as 'Authorization: Bearer <token>'");
+            String bind = getModSettings().getMcpBindAddress();
+            _mcpServer.start(mport, bind);
+            if ("0.0.0.0".equals(bind) || "::".equals(bind)) {
+                Debug.logWarning("MCP server bound to " + bind + ":" + mport
+                        + " — reachable from the network. Bearer token is the only access control; no TLS.");
+            } else {
+                Debug.logMessage("MCP server started on " + bind + ":" + mport
+                        + " — auth token in " + adris.altoclef.Settings.SETTINGS_PATH
+                        + " (mcpAuthToken), required as 'Authorization: Bearer <token>'");
+            }
         } catch (Exception e) {
             Debug.logWarning("MCP server failed to start: " + e.getMessage());
             _mcpServer = null;

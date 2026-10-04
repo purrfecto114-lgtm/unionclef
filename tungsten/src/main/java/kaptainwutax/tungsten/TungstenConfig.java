@@ -244,8 +244,13 @@ public class TungstenConfig {
 
     /** Use parallel threads for node creation in A* search.
      *  Faster on multi-core CPUs but Agent.tick/WorldView may not be fully
-     *  thread-safe. Disable if you see rare ConcurrentModificationException. */
-    public boolean enableParallelStreaming = true;
+     *  thread-safe. Disable if you see rare ConcurrentModificationException.
+     *  DEFAULT FLIPPED TO FALSE (audit angle 10, 2026-10-04): the search thread and
+     *  its pool read a LIVE ClientWorld with no snapshot, and this switch multiplies
+     *  the concurrent readers. The config comment above already conceded the CME
+     *  risk; the safe default is the serialized stream. Turn on deliberately for
+     *  benchmarks, not for play. */
+    public boolean enableParallelStreaming = false;
 
 
     // ---- follow settings ----

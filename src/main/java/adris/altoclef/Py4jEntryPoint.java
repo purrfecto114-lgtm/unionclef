@@ -127,21 +127,27 @@ public class Py4jEntryPoint {
     }
 
     public void setPerspective(int perspectiveNum) {
-        Perspective perspective = Perspective.FIRST_PERSON;
-        switch (perspectiveNum) {
-            case 0:
-                perspective = Perspective.FIRST_PERSON;
-                break;
-            case 1:
-                perspective = Perspective.THIRD_PERSON_BACK;
-                break;
-            case 2:
-                perspective = Perspective.THIRD_PERSON_FRONT;
-                break;
-            default:
-                Debug.logMessage("Unknown perspective requested: " + perspectiveNum);
-        }
-        MinecraftClient.getInstance().options.setPerspective(perspective);
+        // audit angle 10, 2026-10-04: this arrived from the py4j scheduler thread and
+        // mutated client options directly. Marshalled to the client thread like the
+        // other guarded entry points.
+        onClientThread(() -> {
+            Perspective perspective = Perspective.FIRST_PERSON;
+            switch (perspectiveNum) {
+                case 0:
+                    perspective = Perspective.FIRST_PERSON;
+                    break;
+                case 1:
+                    perspective = Perspective.THIRD_PERSON_BACK;
+                    break;
+                case 2:
+                    perspective = Perspective.THIRD_PERSON_FRONT;
+                    break;
+                default:
+                    Debug.logMessage("Unknown perspective requested: " + perspectiveNum);
+            }
+            MinecraftClient.getInstance().options.setPerspective(perspective);
+            return true;
+        }, false);
     }
 
     public boolean hasActiveTask() {
@@ -346,25 +352,31 @@ public class Py4jEntryPoint {
      * @return the count, or -1 when there is no world to look at
      */
     public int countLogsNear(int radius) {
-        try {
-            if (!AltoClef.inGame() || _mod.getWorld() == null || _mod.getPlayer() == null) return -1;
-            net.minecraft.util.math.BlockPos me = _mod.getPlayer().getBlockPos();
-            int found = 0;
-            for (int dx = -radius; dx <= radius; dx += 2) {
-                for (int dz = -radius; dz <= radius; dz += 2) {
-                    for (int dy = -8; dy <= 24; dy += 2) {
-                        net.minecraft.util.math.BlockPos p = me.add(dx, dy, dz);
-                        if (!_mod.getWorld().isChunkLoaded(p.getX() >> 4, p.getZ() >> 4)) continue;
-                        if (_mod.getWorld().getBlockState(p).isIn(net.minecraft.registry.tag.BlockTags.LOGS)) {
-                            found++;
+        // audit angle 10, 2026-10-04: this scans LIVE chunk/block state from the py4j
+        // scheduler thread (the exact CME/window shape Agent.java's victim list
+        // documents). The scan is marshalled to the client thread; the -1 fallback
+        // covers the no-world case and the 5 s timeout.
+        return onClientThread(() -> {
+            try {
+                if (!AltoClef.inGame() || _mod.getWorld() == null || _mod.getPlayer() == null) return -1;
+                net.minecraft.util.math.BlockPos me = _mod.getPlayer().getBlockPos();
+                int found = 0;
+                for (int dx = -radius; dx <= radius; dx += 2) {
+                    for (int dz = -radius; dz <= radius; dz += 2) {
+                        for (int dy = -8; dy <= 24; dy += 2) {
+                            net.minecraft.util.math.BlockPos p = me.add(dx, dy, dz);
+                            if (!_mod.getWorld().isChunkLoaded(p.getX() >> 4, p.getZ() >> 4)) continue;
+                            if (_mod.getWorld().getBlockState(p).isIn(net.minecraft.registry.tag.BlockTags.LOGS)) {
+                                found++;
+                            }
                         }
                     }
                 }
+                return found;
+            } catch (Exception e) {
+                return -1;
             }
-            return found;
-        } catch (Exception e) {
-            return -1;
-        }
+        }, -1);
     }
 
     /**
