@@ -1,0 +1,53 @@
+name: build
+
+# Added 2026-10-04 (audit angle 10: the repo had zero build CI — only wiki sync).
+# Compiles every version subproject (tungsten + the three altoclef targets) and
+# runs the tungsten pure-logic unit tests. This is the check the audit's
+# "versions/ empty dirs" and "jitpack preprocessor 404" findings would have
+# surfaced the day they were introduced instead of weeks later.
+
+on:
+  push:
+    branches: [main, 1.21.11]
+  pull_request:
+    branches: [main, 1.21.11]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle (cache wrapper + dependencies)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile tungsten (standalone pathfinder, MC 1.21.11 mappings)
+        run: ./gradlew :tungsten:compileJava --no-daemon --stacktrace
+
+      - name: Run tungsten pure-logic unit tests
+        run: ./gradlew :tungsten:test --no-daemon
+
+      - name: Compile altoclef 1.21.1 (main source tree)
+        run: ./gradlew :1.21.1:compileJava --no-daemon --stacktrace
+
+      - name: Compile altoclef 1.21
+        run: ./gradlew :1.21:compileJava --no-daemon --stacktrace
+
+      - name: Compile altoclef 1.21.11
+        run: ./gradlew :1.21.11:compileJava --no-daemon --stacktrace
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: tungsten/build/test-results/
+          retention-days: 7
