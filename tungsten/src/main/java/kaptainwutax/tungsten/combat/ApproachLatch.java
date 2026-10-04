@@ -129,13 +129,40 @@ public final class ApproachLatch {
             double fwd = nx * fx + nz * fz;
             double side = nx * rx + nz * rz;
             final double DEADZONE = 0.25;
-            mc.options.forwardKey.setPressed(fwd > DEADZONE);
-            mc.options.backKey.setPressed(fwd < -DEADZONE);
-            mc.options.rightKey.setPressed(side > DEADZONE);
-            mc.options.leftKey.setPressed(side < -DEADZONE);
+            // audit angle 2: these presses register with the input arbiter — ApproachLatch
+            // is exactly the kind of secondary driver the phase order does not cover.
+            if (kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_COMBAT,
+                    mc.options.forwardKey.getDefaultKey().getTranslationKey())
+                    || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce)
+                mc.options.forwardKey.setPressed(fwd > DEADZONE);
+            if (kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_COMBAT,
+                    mc.options.backKey.getDefaultKey().getTranslationKey())
+                    || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce)
+                mc.options.backKey.setPressed(fwd < -DEADZONE);
+            if (kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_COMBAT,
+                    mc.options.rightKey.getDefaultKey().getTranslationKey())
+                    || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce)
+                mc.options.rightKey.setPressed(side > DEADZONE);
+            if (kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_COMBAT,
+                    mc.options.leftKey.getDefaultKey().getTranslationKey())
+                    || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce)
+                mc.options.leftKey.setPressed(side < -DEADZONE);
             // Sprint only earns its speed going forwards, and the whole point is the 0.244 b/t
             // figure, which is a sprinting number.
-            mc.options.sprintKey.setPressed(fwd > DEADZONE);
+            if (kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_COMBAT,
+                    mc.options.sprintKey.getDefaultKey().getTranslationKey())
+                    || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce)
+                mc.options.sprintKey.setPressed(fwd > DEADZONE);
             latched++;
         } catch (Exception ignored) {
             // a movement aid must never be the thing that breaks a fight

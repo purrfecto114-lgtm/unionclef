@@ -66,15 +66,29 @@ public final class CombatMoveIntent {
     /**
      * The ONE place combat is allowed to touch the movement keys. Everything not
      * requested is explicitly released, so a stale press can never survive a tick.
+     *
+     * <p>audit angle 2: presses register with the central input arbiter (domain
+     * TUNGSTEN_COMBAT). Releases are never arbitrated — see InputArbiter.
      */
     public void writeKeys(MinecraftClient mc) {
-        mc.options.forwardKey.setPressed(forward);
-        mc.options.backKey.setPressed(back);
-        mc.options.leftKey.setPressed(left);
-        mc.options.rightKey.setPressed(right);
-        mc.options.sprintKey.setPressed(sprint);
-        mc.options.jumpKey.setPressed(jump);
-        mc.options.sneakKey.setPressed(sneak);
+        press(mc.options.forwardKey, forward);
+        press(mc.options.backKey, back);
+        press(mc.options.leftKey, left);
+        press(mc.options.rightKey, right);
+        press(mc.options.sprintKey, sprint);
+        press(mc.options.jumpKey, jump);
+        press(mc.options.sneakKey, sneak);
+    }
+
+    private static void press(net.minecraft.client.option.KeyBinding kb, boolean pressed) {
+        if (pressed) {
+            boolean uncontended = kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_COMBAT,
+                    kb.getDefaultKey().getTranslationKey());
+            if (!uncontended && kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce) return;
+        }
+        kb.setPressed(pressed);
     }
 
     /** World-space horizontal heading (dx,dz) implied by this intent's keys, or null

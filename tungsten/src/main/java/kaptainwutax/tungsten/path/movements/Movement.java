@@ -757,25 +757,25 @@ public abstract class Movement {
         inputStates.forEach((input, forced) -> {
             switch (input) {
                 case MOVE_FORWARD:
-                    options.forwardKey.setPressed(forced);
+                    if (pressAllowed(options.forwardKey)) options.forwardKey.setPressed(forced);
                     break;
                 case MOVE_BACK:
-                    options.backKey.setPressed(forced);
+                    if (pressAllowed(options.backKey)) options.backKey.setPressed(forced);
                     break;
                 case MOVE_LEFT:
-                    options.leftKey.setPressed(forced);
+                    if (pressAllowed(options.leftKey)) options.leftKey.setPressed(forced);
                     break;
                 case MOVE_RIGHT:
-                    options.rightKey.setPressed(forced);
+                    if (pressAllowed(options.rightKey)) options.rightKey.setPressed(forced);
                     break;
                 case JUMP:
-                    options.jumpKey.setPressed(forced);
+                    if (pressAllowed(options.jumpKey)) options.jumpKey.setPressed(forced);
                     break;
                 case SNEAK:
-                    options.sneakKey.setPressed(forced);
+                    if (pressAllowed(options.sneakKey)) options.sneakKey.setPressed(forced);
                     break;
                 case SPRINT:
-                    options.sprintKey.setPressed(forced);
+                    if (pressAllowed(options.sprintKey)) options.sprintKey.setPressed(forced);
                     break;
                 case CLICK_LEFT:
                 case CLICK_RIGHT:
@@ -785,8 +785,25 @@ public abstract class Movement {
                     break;
             }
         });
-        options.attackKey.setPressed(clickLeft);
+        if (pressAllowed(options.attackKey)) options.attackKey.setPressed(clickLeft);
         blockPlaceHelperTick(player, clickRight);
+    }
+
+    /**
+     * Arbiter hook (audit angle 2, 2026-10-04): the queue's presses register with
+     * the central input registry so a contending writer elsewhere in the same tick
+     * is logged (and, with inputArbiterEnforce, suppressed). Shadow by default.
+     */
+    private static boolean pressAllowed(net.minecraft.client.option.KeyBinding kb) {
+        try {
+            boolean uncontended = kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.TUNGSTEN_MOVEMENT,
+                    kb.getDefaultKey().getTranslationKey());
+            return uncontended || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce;
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     /**

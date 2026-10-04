@@ -46,6 +46,7 @@ public class InputControls {
         if (_waitForRelease.contains(input)) {
             return;
         }
+        if (!arbiterAllowsPress(input)) return;
         inputToKeyBinding(input).setPressed(true);
         // Also necessary to ensure the game registers the input as "pressed"
         KeyBinding.onKeyPressed(inputToKeyBinding(input).getDefaultKey());
@@ -54,10 +55,32 @@ public class InputControls {
     }
 
     public void hold(Input input) {
+        if (!arbiterAllowsPress(input)) return;
         if (!inputToKeyBinding(input).isPressed()) {
             KeyBinding.onKeyPressed(inputToKeyBinding(input).getDefaultKey());
         }
         inputToKeyBinding(input).setPressed(true);
+    }
+
+    /**
+     * Arbiter hook (audit angle 2, 2026-10-04): every altoclef PRESS goes through
+     * here and registers with the central input registry, so a tungsten driver
+     * pressing the same key in the same tick is recorded (and, with
+     * {@code TungstenConfig.inputArbiterEnforce}, suppressed). Releases are
+     * deliberately NOT arbitrated — blocking a release risks a stuck key, and the
+     * steal instrumentation above already names release thieves.
+     */
+    private boolean arbiterAllowsPress(Input input) {
+        try {
+            String key = inputToKeyBinding(input).getTranslationKey();
+            boolean uncontended = kaptainwutax.tungsten.input.InputArbiter.claim(
+                    kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                    kaptainwutax.tungsten.input.InputArbiter.Domain.ALTOCLEF_TASKS, key);
+            if (uncontended) return true;
+            return !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce;
+        } catch (Throwable ignored) {
+            return true; // the arbiter must never break the input path itself
+        }
     }
 
     /**
@@ -227,6 +250,10 @@ public class InputControls {
 
     // Before the user calls input commands for the frame
     public void onTickPre() {
+        // audit angle 2: one shared game-tick id for the whole input arbiter — this
+        // runs at MinecraftClient.tick HEAD, before every tungsten driver in the
+        // same client tick, so all claims this tick share one id.
+        kaptainwutax.tungsten.input.InputArbiter.advanceTick();
         while (!toUnpress.isEmpty()) {
             inputToKeyBinding(toUnpress.remove()).setPressed(false);
         }

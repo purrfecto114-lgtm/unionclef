@@ -87,6 +87,16 @@ public class TungstenConfig {
      */
     public boolean driftFrameTimeAdaptive = true;
 
+    /**
+     * ENFORCE the central input arbiter (audit angle 2, 2026-10-04). Default OFF =
+     * shadow mode: cross-domain key conflicts are logged with their owner domains
+     * (see kaptainwutax.tungsten.input.InputArbiter), but both writes go through.
+     * True = a write from a domain that lost the claim for that key/tick is
+     * suppressed. Flip on after reviewing the conflict log, NOT blind — the G-0
+     * history is exactly what an enforced-but-wrong input rule looks like.
+     */
+    public boolean inputArbiterEnforce = false;
+
     /** If true: enable trail-following when target escapes (dist>20).
      *  If false: always pathfind directly to target position. */
     public boolean enableTrailing = false;

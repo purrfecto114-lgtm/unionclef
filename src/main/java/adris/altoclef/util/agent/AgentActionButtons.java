@@ -148,6 +148,12 @@ public class AgentActionButtons {
         MinecraftClient client = MinecraftClient.getInstance();
         KeyBinding keyBinding = client.options.dropKey;
         boolean pressed = true;
+        // audit angle 2: external agent writes register with the input arbiter
+        // (shadow mode by default — see InputArbiter).
+        kaptainwutax.tungsten.input.InputArbiter.claim(
+                kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                kaptainwutax.tungsten.input.InputArbiter.Domain.EXTERNAL,
+                keyBinding.getTranslationKey());
         keyBinding.setPressed(pressed);
     }
 
@@ -162,6 +168,11 @@ public class AgentActionButtons {
 
         // setPressed updates the state explicitly.
         // This allows holding (e.g., holding Q to drop a stack) or tapping.
+        // audit angle 2: external agent writes register with the input arbiter.
+        kaptainwutax.tungsten.input.InputArbiter.claim(
+                kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                kaptainwutax.tungsten.input.InputArbiter.Domain.EXTERNAL,
+                keyBinding.getTranslationKey());
         keyBinding.setPressed(pressed);
 
         // OPTIONAL: If the key isn't triggering on a single frame "1" signal,

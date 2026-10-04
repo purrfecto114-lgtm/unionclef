@@ -2047,6 +2047,11 @@ public class Py4jEntryPoint {
                 case "right" -> _mod.getInputControls().tryPress(kaptainwutax.tungsten.path.movements.Input.CLICK_RIGHT);
                 case "middle" -> {
                     var k = client.options.pickItemKey;
+                    // audit angle 2: external presses register with the input arbiter.
+                    kaptainwutax.tungsten.input.InputArbiter.claim(
+                            kaptainwutax.tungsten.input.InputArbiter.currentTick(),
+                            kaptainwutax.tungsten.input.InputArbiter.Domain.EXTERNAL,
+                            k.getTranslationKey());
                     k.setPressed(true);
                     net.minecraft.client.option.KeyBinding.onKeyPressed(k.getDefaultKey());
                     // released next tick by the client's own key handling
