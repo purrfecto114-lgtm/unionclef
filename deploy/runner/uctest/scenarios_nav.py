@@ -687,7 +687,7 @@ class NavLava(NavCourse):
         # ⛔ THE PLAYTHROUGH'S DRIVE, NOT TUNGSTEN'S ;goto. The first version drove with gotoXYZ like
         # every other nav course, and it passed 3/3 on BOTH 0.95.37 and the 0.95.29 release -- which
         # had no executor-side lava checks at all -- so it could not see the defect it was built for.
-        # The nether deaths happen under the altoclef drive (CustomBaritoneGoalTask: CombatPathfinder
+        # The nether deaths happen under the altoclef drive (CustomTungstenGoalTask: CombatPathfinder
         # BFS, the walker, the queue and the executor handing off between them), so that is the drive
         # this course uses: @goto, exactly what the chase course's runner uses.
         ctx.bot.cmd(f"@goto {gx} {gy} {gz}")

@@ -295,7 +295,10 @@ public abstract class CustomTungstenGoalTask extends Task implements ITaskRequir
         // ── Tungsten lock: exclusive 30s control, other drivers stay off ──
         if (TungstenHelper.isLocked()) {
             TungstenHelper.tickLock();
-            Nav.cancel();
+            // ⛔ NO cancel() HERE (second review round): this branch HOLDS the lock that
+            // a kicked search is feeding — a real cancel cleared the lock and killed the
+            // search every tick, dissolving the "exclusive 30s control" it claims to
+            // enforce. Holding is the branch's whole job.
             checker.reset();
             long remaining = Math.max(0, (TungstenHelper.lockUntilMs() - System.currentTimeMillis()) / 1000);
             setDebugState("Tungsten pathfinding (" + remaining + "s left)");
@@ -333,8 +336,12 @@ public abstract class CustomTungstenGoalTask extends Task implements ITaskRequir
                         var t = cachedAlto.target();
                         if (t != null) goalPos = t;
                         if (TungstenHelper.tryPathTo(goalPos)) {
-                            Nav.cancel();
-                            setDebugState("Tungsten stalled, falling back to wandering...");
+                            // ⛔ NO cancel() HERE (second review round, 2026-10-04): tryPathTo
+                            // just kicked a search AND took the 30 s lock — a real cancel on
+                            // the next line was the G-0 kick/kill pattern in miniature: the
+                            // rescue would kill its own rescue, then the 1 s cooldown blocked
+                            // the retry. The tryPathTo IS the claim of ownership.
+                            setDebugState("Tungsten re-pathing after stall...");
                             return null;
                         }
                     }

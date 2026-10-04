@@ -695,6 +695,13 @@ public class TungstenHelper {
     public static void stop() {
         if (!isTungstenLoaded()) return;
         try {
+            // Log only when something was ACTUALLY running/locked (second review round):
+            // with Nav.cancel() wired, defensive call sites invoke stop() every tick while
+            // a healthy route runs — an unconditional log turned into stdout spam and made
+            // the counter-vs-log story unreadable.
+            boolean wasActive = active || lockUntil != 0
+                    || kaptainwutax.tungsten.TungstenModDataContainer.PATHFINDER.stop.get()
+                    || (TungstenModDataContainer.EXECUTOR != null && TungstenModDataContainer.EXECUTOR.stop);
             kaptainwutax.tungsten.path.PathFinder.noteStop("TungstenHelper@600");
             TungstenModDataContainer.PATHFINDER.stop.set(true);
             PathExecutor exec = TungstenModDataContainer.EXECUTOR;
@@ -704,7 +711,9 @@ public class TungstenHelper {
             lockedEntity = null;
             lockStartDist = -1;
             barrenStreak = 0;
-            Debug.logInternal("[TungstenHelper] Stopped (lock cleared)");
+            if (wasActive) {
+                Debug.logInternal("[TungstenHelper] Stopped (lock cleared)");
+            }
         } catch (Exception e) {
             Debug.logWarning("[TungstenHelper] Failed to stop: " + e.getMessage());
         }

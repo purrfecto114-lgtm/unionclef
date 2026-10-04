@@ -149,12 +149,15 @@ public class AgentActionButtons {
         KeyBinding keyBinding = client.options.dropKey;
         boolean pressed = true;
         // audit angle 2: external agent writes register with the input arbiter
-        // (shadow mode by default — see InputArbiter).
-        kaptainwutax.tungsten.input.InputArbiter.claim(
+        // (shadow mode by default — see InputArbiter). The claim return value is
+        // consumed like every other domain so enforce mode binds this channel too.
+        boolean allowed = kaptainwutax.tungsten.input.InputArbiter.claim(
                 kaptainwutax.tungsten.input.InputArbiter.currentTick(),
                 kaptainwutax.tungsten.input.InputArbiter.Domain.EXTERNAL,
                 keyBinding.getTranslationKey());
-        keyBinding.setPressed(pressed);
+        if (allowed || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce) {
+            keyBinding.setPressed(pressed);
+        }
     }
 
     /**
@@ -168,12 +171,15 @@ public class AgentActionButtons {
 
         // setPressed updates the state explicitly.
         // This allows holding (e.g., holding Q to drop a stack) or tapping.
-        // audit angle 2: external agent writes register with the input arbiter.
-        kaptainwutax.tungsten.input.InputArbiter.claim(
+        // audit angle 2: external agent writes register with the input arbiter and
+        // consume the claim result so enforce mode binds this channel too.
+        boolean allowed = kaptainwutax.tungsten.input.InputArbiter.claim(
                 kaptainwutax.tungsten.input.InputArbiter.currentTick(),
                 kaptainwutax.tungsten.input.InputArbiter.Domain.EXTERNAL,
                 keyBinding.getTranslationKey());
-        keyBinding.setPressed(pressed);
+        if (allowed || !kaptainwutax.tungsten.TungstenConfig.get().inputArbiterEnforce) {
+            keyBinding.setPressed(pressed);
+        }
 
         // OPTIONAL: If the key isn't triggering on a single frame "1" signal,
         // you might need to artificially increment the press times for one-shot actions,

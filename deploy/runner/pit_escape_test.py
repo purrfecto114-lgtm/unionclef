@@ -4,7 +4,7 @@
 Live on the survival stand 2026-09-10 the @gamer bot dug/fell into a shaft and stood at the
 bottom for 3 minutes: its goal (a log) was UP and to the SIDE, and the task-driven navigator's
 pillar recovery only fired when the goal was nearly straight overhead (horizToGoal < 1.5), so it
-yielded forever. The fix (CustomBaritoneGoalTask.pillarEscapeY) pillars out of a shaft whose wall
+yielded forever. The fix (CustomTungstenGoalTask.pillarEscapeY) pillars out of a shaft whose wall
 in the goal's direction is >= 2 tall. This test reproduces the shaft deterministically and asserts
 the bot leaves it.
 

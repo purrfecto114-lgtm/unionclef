@@ -498,7 +498,8 @@ boolean walkDrove = kaptainwutax.tungsten.TungstenConfig.get().closeWalkKeepsKey
         // ── superParkourMode: Tungsten is PRIMARY, start immediately ──
         if (parkourMode && !TungstenHelper.isLocked() && !TungstenHelper.isActive()) {
             if (TungstenHelper.tryPathToEntity(_entity)) {
-                Nav.cancel();
+                // ⛔ NO cancel() HERE (second review round, 2026-10-04): the kick IS the
+                // claim; a real cancel after it was the G-0 kick/kill pattern in miniature.
             }
         }
 
@@ -521,7 +522,10 @@ boolean walkDrove = kaptainwutax.tungsten.TungstenConfig.get().closeWalkKeepsKey
         // letting this release and re-lock for ever.
         if (TungstenHelper.isLocked()) {
             TungstenHelper.tickLock();
-            Nav.cancel();
+            // ⛔ NO cancel() HERE (second review round): the lock branch HOLDS the lock
+            // that its kicked search feeds — a real cancel cleared the lock and killed
+            // the search every tick (same self-dissolve as the CustomTungstenGoalTask
+            // lock branch). Holding is the branch's whole job.
             long remaining = Math.max(0, (TungstenHelper.lockUntilMs() - System.currentTimeMillis()) / 1000);
             if (!mustMove) {
                 _progress.reset();
@@ -889,10 +893,12 @@ boolean walkDrove = kaptainwutax.tungsten.TungstenConfig.get().closeWalkKeepsKey
             return null;
         }
         if (!_progress.check(mod)) {
-            // Baritone failed — try Tungsten (acquires 30s lock)
+            // progress failed — try Tungsten (acquires 30s lock; wording fixed in the
+            // rename round: this branch never involved Baritone)
             if (TungstenHelper.tryPathToEntity(_entity)) {
-                Nav.cancel();
-                setDebugState(parkourMode ? "Tungsten retrying" : "Baritone stuck → Tungsten locked for 30s");
+                // ⛔ NO cancel() HERE (second review round): tryPathToEntity just kicked
+                // the search and took the lock — a real cancel killed both same-tick.
+                setDebugState(parkourMode ? "Tungsten retrying" : "Progress failed → Tungsten locked for 30s");
                 return null;
             }
             // ⛔ A REFUSAL WITH NOWHERE TO GO IS HOW THIS TASK FREEZES FOR THE REST OF THE RUN.

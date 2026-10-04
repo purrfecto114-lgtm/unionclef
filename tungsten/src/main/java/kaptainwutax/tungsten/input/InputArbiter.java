@@ -19,9 +19,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * the keys — so wholesale interception would mostly re-implement the existing
  * phase discipline with new ways to be wrong (see G-0: making {@code Nav.pause}
  * do something cost six courses). What the phase order does NOT cover is the
- * secondary writers: ApproachLatch, CombatMoveIntent, ProjectileDodge, VoidGuard,
- * TriggerBot's sprint, and the external py4j primitives
- * (AgentActionButtons, mouseClick). Those register here.
+ * secondary writers: ApproachLatch, CombatMoveIntent, Movement's applyInputs,
+ * altoclef's InputControls presses, and the external py4j primitives
+ * (AgentActionButtons, mouseClick). Those register here. Still unregistered
+ * (planned, not claimed): ProjectileDodge, VoidGuard, TriggerBot's sprint
+ * release, PathExecutor's inline presses — they stay under the phase discipline
+ * until their claim points land.
  *
  * <p><b>Mode:</b> shadow by default ({@code TungstenConfig.inputArbiterEnforce}).
  * In shadow mode a contended claim still records a conflict and the caller may

@@ -235,7 +235,7 @@ public class CombatPathfinder {
                                           boolean allowParkour, boolean cardinalOnly) {
         // WHAT SHAPE DOES THIS ACTUALLY RETURN? Its own javadoc calls it an instant grid BFS
         // for FollowEntityTask to chase a nearby entity while the physics A* computes -- yet
-        // the walking drive uses it as its route source (CustomBaritoneGoalTask:715). With
+        // the walking drive uses it as its route source (CustomTungstenGoalTask:715). With
         // MAX_NODES=800 and survival goals fourteen blocks out through real terrain, it may
         // exhaust the budget every time and hand back a stub. Measured live during a stall:
         // mqRefused(short)=2337 against 2299 BFS ticks, one refusal per tick, while

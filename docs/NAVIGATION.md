@@ -153,7 +153,7 @@ failures are — see the hand-off notes further down this file.
 
 | engine | what it is | added | who calls it |
 |---|---|---|---|
-| `CombatPathfinder` | grid BFS, 800 nodes, radius 25, **no jumps**, runs SYNCHRONOUSLY on the client tick | 2026-03, for combat | `FollowEntityTask` (chase) and altoclef `CustomBaritoneGoalTask`. NOT part of `;goto` |
+| `CombatPathfinder` | grid BFS, 800 nodes, radius 25, **no jumps**, runs SYNCHRONOUSLY on the client tick | 2026-03, for combat | `FollowEntityTask` (chase) and altoclef `CustomTungstenGoalTask`. NOT part of `;goto` |
 | `FastPlanner` | block A*: typed moves, real g accumulation, admissible heuristic, `PlayerFit` body checks | 2026-07-25 (PIPE-1) | `FastNavigator`, and as the first attempt inside `PathFinder.findBlockPath` |
 | `BlockSpacePathFinder` | block A*: blind radius-8 scan (~1086 candidates); real g accumulation since 2026-08-02, see correction below | initial commit, fixed `00c48c84` | fallback inside `findBlockPath` |
 | `PathFinder` | physics A*: simulates a real player (~192 sims per expansion) | initial commit | pipeline B |

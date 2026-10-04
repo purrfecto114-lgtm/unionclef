@@ -7,7 +7,7 @@ cannot do that baritone can, and the concrete in-game situation each one will br
 
 ## How to read this
 
-The `@gamer`/`@goto` task path (`CustomBaritoneGoalTask.driveTungstenPrimary`) uses several engines:
+The `@gamer`/`@goto` task path (`CustomTungstenGoalTask.driveTungstenPrimary`) uses several engines:
 
 | Engine | Role | Can break? | Can place? |
 |---|---|---|---|
@@ -153,7 +153,7 @@ Log 07:52:19–07:54:11: `Time taken to execute: 0 minutes, 0 seconds, ~100 mill
 targets at y=59 while the bot stood on the surface at y=64; freeze dump: `snap=2034/1860/174/self1833`,
 `atGoal=182(ex182,ytol0)@GetToBlockTask`, `pdPillar=0`, `mqSteps=0`. Chain: `DestroyBlockTask` →
 `GetToBlockTask(pos)` (`breakGoalIsReach` is off, measured-and-not-shipped) → `AltoGoal.block(pos)`
-("occupy the cell") → `CustomBaritoneGoalTask.snapGoalToStandable` finds no standable neighbour
+("occupy the cell") → `CustomTungstenGoalTask.snapGoalToStandable` finds no standable neighbour
 underground and takes the "stand on top" column search → the SURFACE cell → the bot walks there,
 arrival is unsatisfiable (exact-cell test on a solid block) → asks again next tick → FastPlanner
 `planStartIsGoal` (one-cell path) → PathExecutor "finishes" in 100 ms → loop. **Nothing ever asks
@@ -163,7 +163,7 @@ ore; it goes ADJACENT, and its search breaks blocks on the way. Principle: **a m
 REACH goal (`AltoGoal.Adjacent`, the GoalGetToBlock predicate), planned by FastPlanner with a
 reach-goal test, dig allowed. No snapping.** Fix: `AltoGoal.Adjacent` + `GetAdjacentToBlockTask` +
 `FastPlanner.plan(..., reachBlock)` + `FastNavigator.start(target, reachBlock)` +
-`CustomBaritoneGoalTask.driveReach`; `DestroyBlockTask` uses it (`mineGoalIsAdjacent`).
+`CustomTungstenGoalTask.driveReach`; `DestroyBlockTask` uses it (`mineGoalIsAdjacent`).
 *Refinement after the first run on it:* adjacency alone is too strict for anything TALL — a log
 five up a trunk is mined from the ground in vanilla, and with an empty pocket the planner could
 not become "adjacent" to it (150 s under a spruce: "walking dead-ends → physics owns the rest →
@@ -303,7 +303,7 @@ y=100.8"), "Drop has cost more than its budget" at 200 s. Root: `GetToEntityTask
 engine, `TungstenHelper.tryPathToEntity` → the physics `PathFinder` (E4), which walks and jumps
 and can neither place nor break; when it refuses, the task holds MOVE_FORWARD into the ledge face
 (`entityCloseRangeWalk`) and then wanders. FastPlanner — the engine with `pillarUp` and
-`breakStair` — is reached only through `CustomBaritoneGoalTask.driveTungstenPrimary`, and no
+`breakStair` — is reached only through `CustomTungstenGoalTask.driveTungstenPrimary`, and no
 entity approach goes through the drive. So the user's question "does FastPlanner die on a two-block
 ledge?" has the answer: it was never asked. Same disease the ores had in G25, one layer up.
 Principle: **a drop that has come to rest is a place, and a place is reached by the build
@@ -326,7 +326,7 @@ blocks (`at the dig — mining … -52 … -57`), then at y=−57 with the goal 
 into `Found rought path!` / `Time taken to find path: 2 ms` / `Finished!` every 0.5 s for 140 s while
 the bot looks at the floor block. `drop_ledge` phase B: the bot on the ledge top, the drop 2.4
 blocks away on the same flat top, `Tungsten (primary) pathfinding...` for 70 s, `Drop not getting
-closer for 25s`. Roots, in `CustomBaritoneGoalTask.driveTungstenPrimary`: (a) `snapGoalToStandable`
+closer for 25s`. Roots, in `CustomTungstenGoalTask.driveTungstenPrimary`: (a) `snapGoalToStandable`
 walks a solid goal's column up to five cells for somewhere to stand, and from the bottom of the
 bot's own shaft that cell IS the bot's feet — the snapped goal became "here", the `goal moved`
 guard (25 > 16) stopped the navigator without a word, and the drive fell into (b); (b) inside the
@@ -501,7 +501,7 @@ in G34) and **a column without headroom is refused at once** (PillarTask stops w
 when a block sits two above the feet, so the navigator re-plans instead of jumping into it for the
 stuck window). Flag `pillarInPlannedColumn`; counters `navPillarSteered`, `pillarNoHeadroom`.
 
-**G52. A route outlives the drive that owned it.** `CustomBaritoneGoalTask.onStop` stopped only
+**G52. A route outlives the drive that owned it.** `CustomTungstenGoalTask.onStop` stopped only
 the physics search (`TungstenHelper.stop`); the navigator, the walker, the queue and the building
 primitives ran on under whatever task came next. The 17:22 recording, in a pit under the bot's
 own crafting table (the canopy it stood on decayed and dropped it six blocks): the cobblestone
@@ -906,7 +906,7 @@ otherwise makes another. Principle: **only a utility block on the way is worth t
 twelve blocks across at most and within two of the feet in height. **G81.** The 00:38 stand had
 NOTHING in the log for eight minutes but the unstuck chain's "generally stuck" line, forty-six
 times, the drive's state a mystery; that line now names the drive's last branch
-(`CustomBaritoneGoalTask.lastDriveNote`), the navigator's state and the chain's leaf, so a silent
+(`CustomTungstenGoalTask.lastDriveNote`), the navigator's state and the chain's leaf, so a silent
 stand has its driver in the same line.
 
 **G82. A tower is built from the base of its cell; a carpet under the feet is cleared first.** The

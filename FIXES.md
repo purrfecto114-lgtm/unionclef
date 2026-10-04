@@ -77,7 +77,7 @@
 **风险如实声明**：38 处 cancel 调用点从 no-op 变为真实停止，进度检查器误报时会把当前腿停掉重来（重新寻路，非冻结）；课程通过率（uctest 的 craft 22/22、nav 14/14）需要一次真机回归才能确认——这是本报告与 CI 都无法替代的一步。
 
 ### F2 角度4：名实相符
-`CustomBaritoneGoalTask` → `CustomTungstenGoalTask`（34 个 Java 文件，`git mv` 保留历史；改名前全仓核实**无字符串注册依赖**，仅 2 处调试标签一并更新）；类内 "Baritone failed — try Tungsten" 等误导文案修正；类 javadoc 记录改名原因与"历史文档保留旧名"的决定。`BaritoneHelper` 仅加 javadoc 说明（避免不必要 churn）。
+`CustomBaritoneGoalTask` → `CustomTungstenGoalTask`（`git mv` 保留历史，另在 34 个引用文件中更新类型/注释；改名前全仓核实**无字符串注册依赖**，仅 2 处调试标签一并更新）；类内 "Baritone failed — try Tungsten" 等误导文案修正；类 javadoc 记录改名原因与"历史文档保留旧名"的决定。`BaritoneHelper` 仅加 javadoc 说明（避免不必要 churn）。
 
 ### F1 角度6：构建与文档
 - `scripts/README.md:45`：`#goto` 示例更正为 `;`/`@` 前缀 + `#` 前缀已随 G-0 退役的说明；:100 "tungsten/baritone commands" 更正
@@ -113,7 +113,24 @@
 5. **MCP 默认只绑回环**——依赖 LAN 连接 agent 的部署需显式 `mcpBindAddress=0.0.0.0`（启动日志会 WARNING）。
 6. 未修复项（如实）：A* 线程对活世界的无快照读（结构性重写）、三层战斗意图的单写者化、`versions/mainProject` 之外的 1.21.11 源码生成依赖 preprocessor 本地可用（jitpack 404 影响新克隆）。
 
-## 四、审计报告修正清单（本次辩证核验新增）
+## 四、二次复审轮（独立子代理对抗复审后的修复）
+
+复审判定：A/C/D/E/F/G/H/I/J 项 PASS；B（Nav 接线）初判 FAIL、K 与若干 CONCERN。以下是复审后的处置：
+
+**已修复（复审 FAIL/CONCERN）**：
+1. **三处漏网的 kick+cancel**：`CustomTungstenGoalTask`（stall 救援分支 tryPathTo 成功后）、`GetToEntityTask`（superParkour 与 progress-fail 分支 tryPathToEntity 成功后）——全部移除并留注释：kick 即所有权声明，其后的 cancel 是 G-0 相杀的 1-tick 变体。
+2. **两处锁分支自毁**：两个任务类的 `isLocked()` 分支内 Nav.cancel() 移除——持锁分支的职责是持有锁，而不是每 tick 清锁杀搜索。
+3. **pause 覆盖面**：Bridge/Pillar/SwimOut/SlimeBounce 四个 build 原语在暂停窗内同样挂起（原先与"挂起导航驱动"的声明不一致）。
+4. **enforce 合同补全**：AgentActionButtons 两处与 py4j mouseClick 现在消费 claim 返回值（enforce 模式下 EXTERNAL 域真正受约束）；InputArbiter javadoc 的注册名单修正（ProjectileDodge/VoidGuard/TriggerBot/PathExecutor 明示为未注册项）。
+5. **日志刷屏**：TungstenHelper.stop() 仅在确有活动/锁时打日志（行走期间防御式调用不再每 tick 刷屏）。
+6. **反向撒谎注释**：TimeoutWanderTask 两处"Nav.cancel() HAS AN EMPTY BODY"改写为现状描述。
+7. **改名残留**：TungstenConfig/CombatPathfinder/FastPlanner 注释、docs/BARITONE-GAPS.md（7处）、docs/NAVIGATION.md、4 个 python runner 注释、GetToEntityTask 调试文案全部更新为新名。
+
+**复审 FAIL 项的反驳（CI）**：复审报告称 build.yml 的 `branches: [main, 1.21.11]` 被工具吞字为 `ain...` 导致 CI 永不触发。经 od 字节级核验，**文件内容自始正确**（`5b 6d 61 69 6e` = `[main`），YAML 解析结果 `{'push': {'branches': ['main', '1.21.11']}}` 正常——该"FAIL"是终端显示层把 `[m` 当作 ANSI 转义吞掉的伪影，复审者与修复方看到的损坏文本相同，但磁盘字节无任何缺陷。教训已记录：对工具显示的"文件内容"存疑时，用 od/yaml 解析器验证。
+
+**复审后全量验证**：`:tungsten:test` 35/35 + `:1.21.1:compileJava` 重跑通过。
+
+## 五、审计报告修正清单（本次辩证核验新增）
 
 1. 推翻：Py4j 绑定所有网卡（官方文档+javap 双证：默认 127.0.0.1，null 是 customCommands）
 2. 推翻：默认参数下摔落守卫被短路（现行耦合式在默认下返回 false；审计被 TungstenConfig 陈旧注释误导；该守卫 2026-08-23 带门禁上线）

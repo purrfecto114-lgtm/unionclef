@@ -622,7 +622,7 @@ class Scenario:
                                f"samples={n_fps}", gate=False))
         # WHO DROVE THE BODY — the "can baritone be deleted" number, on every course.
         #
-        # CustomBaritoneGoalTask:261 is labelled "THE LAST PLACE THE LEGACY ENGINE STILL MOVES THE
+        # CustomTungstenGoalTask:261 is labelled "THE LAST PLACE THE LEGACY ENGINE STILL MOVES THE
         # BOT" and counts itself as pdLegacy, with a comment saying the deletion question is
         # exactly whether that number is zero on a real run. It is reset per course, so reading it
         # by hand after a suite samples only the LAST course -- which is how a 0 could be believed

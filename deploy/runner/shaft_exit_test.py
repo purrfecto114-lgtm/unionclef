@@ -5,7 +5,7 @@ bot had dug for diamonds, (1508,52,-1516), the next goal nine blocks up on the s
 plan was partial (two ledges, then flagged tower cells), every partial was under the five blocks
 the walk-the-partial rule wants, and the dead-end branch handed the GOAL to the physics engine
 sixty-four times -- which has no place move. pit_escape_test covers the up-and-to-the-side goal
-that CustomBaritoneGoalTask.pillarEscapeY handles; this is the navigator's own plan with the goal
+that CustomTungstenGoalTask.pillarEscapeY handles; this is the navigator's own plan with the goal
 nearly overhead, where the tower must come from the plan's flagged cells.
 
 Layout (flat world, surface block at FY, feet at FY+1): a 2x1 shaft DEPTH deep at (X..X+1, Z),

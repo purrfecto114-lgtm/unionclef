@@ -1942,7 +1942,7 @@ public class TungstenConfig {
     /**
      * Never hand a goal to the legacy engine. Ask tungsten for it instead, or wait a tick.
      *
-     * <p>CustomBaritoneGoalTask has one line left where shredder still moves the bot: when the
+     * <p>CustomTungstenGoalTask has one line left where shredder still moves the bot: when the
      * tungsten drive declines a tick, the goal goes to getCustomGoalProcess().setGoalAndPath. The
      * comment there reasoned the count was inflated by finished tasks poking it on the way out --
      * true, and not the whole story. Nine genuine hand-offs remain on a twenty-minute playthrough
@@ -5176,7 +5176,7 @@ public class TungstenConfig {
      *  break-through). Default ON (was OFF pre-C5.5). FastPlanner still only emits a place move
      *  when the bot actually has a placeable block (placeBudget), so blockless parkour/walk
      *  routing is unaffected. The @gamer drive escalates to FastNavigator (which honours this)
-     *  when the walker cannot reach a goal — see CustomBaritoneGoalTask (wired 2026-09-10). */
+     *  when the walker cannot reach a goal — see CustomTungstenGoalTask (wired 2026-09-10). */
     /**
      * G91 (2026-09-16): the physics hand-off takes its root from a body at REST. find() copies the
      * body's velocity into the root when it is called, and the replay starts when the search
@@ -5514,7 +5514,7 @@ public class TungstenConfig {
          * the bot dug or fell into while mining, with the goal on the surface to one side), pillar out
          * of it instead of giving up. The pre-existing #46 pillar recovery only fired for goals nearly
          * straight overhead; a log up-and-across left the bot standing in the hole holding blocks it
-         * could have climbed with (found live 2026-09-10). See CustomBaritoneGoalTask.pillarEscapeY.
+         * could have climbed with (found live 2026-09-10). See CustomTungstenGoalTask.pillarEscapeY.
          *
          * <p>ON by default — it is the correct behaviour and gated only so the effect on the
          * playthrough can be measured as a paired A/B (--pin-alt pillarEscapePit=true) and so it can
@@ -5779,7 +5779,7 @@ public class TungstenConfig {
      * Let a goal task finish when the bot stands where the SNAP put its goal, not only where the
      * task literally asked.
      *
-     * <p>CustomBaritoneGoalTask.driveTungstenPrimary steers at snapGoalToStandable(goal), and that
+     * <p>CustomTungstenGoalTask.driveTungstenPrimary steers at snapGoalToStandable(goal), and that
      * snap only moves a goal that CANNOT BE STOOD IN. isFinished() meanwhile asks
      * AltoGoal.Block.reached, which demands the bot OCCUPY the requested cell. So for every goal
      * the snap has to move, arrival is unsatisfiable by construction -- the drive parks the bot

@@ -339,12 +339,13 @@ public class TimeoutWanderTask extends Task implements ITaskRequiresGrounded {
                 return _unstuckTask;
             }
             // Not in annoying block — force baritone to recompute
-            // ⛔ AND Nav.cancel() HAS AN EMPTY BODY. Read it: the method is a deliberate,
-            // documented no-op, because the version that stopped tungsten killed the search on
-            // the same tick it was started. So in the ordinary case -- no mob adjacent, not
-            // wedged in a fence -- the ENTIRE give-up branch of the wander is stuckCheck.reset()
-            // and nothing else. It does not re-pick a destination, does not stop the search, and
-            // does not drop the lock.
+            // HISTORY, UPDATED 2026-10-04 (second review round): this block used to say
+            // "⛔ Nav.cancel() HAS AN EMPTY BODY... it does not stop the search". That was
+            // the honest description until the audit-fix wiring: cancel() is now REAL
+            // (TungstenHelper.stop() behind navRealCancel), so the give-up branch below
+            // DOES release the current search, exactly what the wanderSearchMustMove flag
+            // a few lines down asks for by other means. Both paths now mean "release the
+            // attempt"; the flag stays as the per-course A/B switch it always was.
             //
             // Which matters because the re-pick below is gated on
             // !isExecutingRoute() && !TungstenHelper.isActive(): if the thing holding the bot
@@ -525,9 +526,10 @@ public class TimeoutWanderTask extends Task implements ITaskRequiresGrounded {
             // longer than one ~6s window is never visible as one, even though failCounter still
             // climbs correctly toward isFinished()'s threshold. Mirrors GetToEntityTask's
             // entitySearchMustMove fix: when tungsten itself is the thing not moving, actually
-            // release it (TungstenHelper.stop(), not the documented no-op Nav.cancel() a few
-            // lines up) instead of resetting -- "a release is not movement, so the checker
-            // stands" (same reasoning, same file that pattern already lives in).
+            // release it (TungstenHelper.stop(); since the 2026-10-04 wiring the Nav.cancel()
+            // above does the same through the navRealCancel gate) instead of resetting -- "a
+            // release is not movement, so the checker stands" (same reasoning, same file that
+            // pattern already lives in).
             if (kaptainwutax.tungsten.TungstenConfig.get().wanderSearchMustMove
                     && adris.altoclef.util.helpers.TungstenHelper.isActive()) {
                 wanderSearchReleased++;
