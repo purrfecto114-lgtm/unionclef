@@ -451,9 +451,21 @@ public class CombatController {
             float cd = player.getAttackCooldownProgress(0.5f);
             boolean threatClose = d2 < (TriggerBot.REACH + 2.0) * (TriggerBot.REACH + 2.0);
             if (threatClose && cd < 0.55f) {
-                kaptainwutax.tungsten.task.ShieldBlocker.hold(3);
-            } else if (kaptainwutax.tungsten.task.ShieldBlocker.isBlocking()) {
-                kaptainwutax.tungsten.task.ShieldBlocker.release();
+                // audit angle 9: register with the shared shield authority; when the
+                // altoclef chain channel already holds the shield, this channel stays
+                // down (engineShouldPress) instead of pressing the same key twice.
+                kaptainwutax.tungsten.combat.ShieldAuthority.raise(
+                        kaptainwutax.tungsten.combat.ShieldAuthority.Source.TUNGSTEN_ENGINE);
+                if (kaptainwutax.tungsten.combat.ShieldAuthority.engineShouldPress()) {
+                    kaptainwutax.tungsten.task.ShieldBlocker.hold(3);
+                }
+            } else {
+                kaptainwutax.tungsten.combat.ShieldAuthority.release(
+                        kaptainwutax.tungsten.combat.ShieldAuthority.Source.TUNGSTEN_ENGINE);
+                if (kaptainwutax.tungsten.task.ShieldBlocker.isBlocking()
+                        && !kaptainwutax.tungsten.combat.ShieldAuthority.isAnyRaising()) {
+                    kaptainwutax.tungsten.task.ShieldBlocker.release();
+                }
             }
         }
 

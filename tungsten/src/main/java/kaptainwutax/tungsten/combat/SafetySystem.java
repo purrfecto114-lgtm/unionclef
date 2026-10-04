@@ -74,7 +74,7 @@ public class SafetySystem {
         return f;
     }
 
-    private CombatStage stage = CombatStage.PURSUE;
+    private volatile CombatStage stage = CombatStage.PURSUE;
     private CombatStage prevStage = null;
 
     // KB analysis
@@ -89,8 +89,12 @@ public class SafetySystem {
 
     // braking/repositioning output
     private float brakeYaw = 0;
-    private boolean braking = false;
-    private boolean repositioning = false;
+    // volatile (audit angle 9, 2026-10-04): these are WRITTEN on the render thread
+    // (renderUpdate via MixinInGameHud) and READ on the client thread
+    // (CombatController braking/repositioning/plainPursue). Non-volatile meant the
+    // client thread could run on stale stage/flags for unbounded time.
+    private volatile boolean braking = false;
+    private volatile boolean repositioning = false;
     /**
      * WHICH STAGE IS ACTUALLY RETREATING. isRepositioning() is set from THREE different places —
      * NARROW_BATTLE (path-following on a ledge), DANGER_BATTLE (knockback would drop us) and ESCAPE
@@ -960,6 +964,13 @@ public class SafetySystem {
         stage = CombatStage.PURSUE;
         prevStage = null;
         braking = false;
+        // audit angle 9 fix: reset() used to leave repositioning (and the was-*
+        // mirrors below) stale. active=false makes renderUpdate bail at its guard,
+        // so the per-frame clear at the top of that method never ran and the LAST
+        // battle's repositioning=true survived into the next one.
+        repositioning = false;
+        wasBrakingLastFrame = false;
+        wasRepositioningLastFrame = false;
         pathfinder.reset();
         kbEstimator.reset();
         executor.reset();

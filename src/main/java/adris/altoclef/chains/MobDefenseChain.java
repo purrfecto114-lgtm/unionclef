@@ -483,6 +483,11 @@ public class MobDefenseChain extends SingleTaskChain {
 
     private static void startShielding(AltoClef mod) {
         shielding = true;
+        // audit angle 9: register the chain channel with the shared shield authority
+        // so the tungsten engine's use-key arm can defer to this channel instead of
+        // both pressing the same key from two code paths in one tick.
+        kaptainwutax.tungsten.combat.ShieldAuthority.raise(
+                kaptainwutax.tungsten.combat.ShieldAuthority.Source.ALTOCLEF_CHAIN);
                     Nav.pause();
         mod.getExtraBaritoneSettings().setInteractionPaused(true);
         if (!mod.getPlayer().isBlocking()) {
@@ -684,6 +689,8 @@ public class MobDefenseChain extends SingleTaskChain {
 
     private void stopShielding(AltoClef mod) {
         if (shielding) {
+            kaptainwutax.tungsten.combat.ShieldAuthority.release(
+                    kaptainwutax.tungsten.combat.ShieldAuthority.Source.ALTOCLEF_CHAIN);
             ItemStack cursor = StorageHelper.getItemStackInCursorSlot();
             if (ItemVer.isFood(cursor)) {
                 Optional<Slot> toMoveTo = mod.getItemStorage().getSlotThatCanFitInPlayerInventory(cursor, false).or(() -> StorageHelper.getGarbageSlot(mod));
