@@ -84,11 +84,11 @@ public class TimeoutWanderTask extends Task implements ITaskRequiresGrounded {
             int y0 = (int) Math.floor(dest.y);
             for (int d = 0; d <= Math.max(GROUND_SCAN_UP, GROUND_SCAN_DOWN); d++) {
                 if (d <= GROUND_SCAN_DOWN
-                        && adris.altoclef.tasks.movement.CustomBaritoneGoalTask.standable(w, x, y0 - d, z)) {
+                        && adris.altoclef.tasks.movement.CustomTungstenGoalTask.standable(w, x, y0 - d, z)) {
                     return new net.minecraft.util.math.Vec3d(dest.x, y0 - d, dest.z);
                 }
                 if (d != 0 && d <= GROUND_SCAN_UP
-                        && adris.altoclef.tasks.movement.CustomBaritoneGoalTask.standable(w, x, y0 + d, z)) {
+                        && adris.altoclef.tasks.movement.CustomTungstenGoalTask.standable(w, x, y0 + d, z)) {
                     return new net.minecraft.util.math.Vec3d(dest.x, y0 + d, dest.z);
                 }
             }
@@ -501,7 +501,7 @@ public class TimeoutWanderTask extends Task implements ITaskRequiresGrounded {
                 // Counted, not assumed: wanderTargetUnstandable against wanderTungPicked.
                 try {
                     net.minecraft.world.World w = mod.getWorld();
-                    if (w != null && !adris.altoclef.tasks.movement.CustomBaritoneGoalTask.standable(
+                    if (w != null && !adris.altoclef.tasks.movement.CustomTungstenGoalTask.standable(
                             w, (int) Math.floor(dest.x), (int) Math.floor(dest.y),
                             (int) Math.floor(dest.z))) {
                         wanderTargetUnstandable++;

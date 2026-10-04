@@ -3,7 +3,7 @@ package adris.altoclef.tasks.speedrun;
 import adris.altoclef.AltoClef;
 import adris.altoclef.util.goals.AltoGoal;
 import adris.altoclef.BotBehaviour;
-import adris.altoclef.tasks.movement.CustomBaritoneGoalTask;
+import adris.altoclef.tasks.movement.CustomTungstenGoalTask;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.helpers.WorldHelper;
 import adris.altoclef.util.progresscheck.MovementProgressChecker;
@@ -32,7 +32,7 @@ public class DragonBreathTracker {
         return new RunAwayFromDragonsBreathTask();
     }
 
-    private class RunAwayFromDragonsBreathTask extends CustomBaritoneGoalTask {
+    private class RunAwayFromDragonsBreathTask extends CustomTungstenGoalTask {
 
         @Override
         protected void onStart() {

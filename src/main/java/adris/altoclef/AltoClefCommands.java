@@ -21,6 +21,7 @@ public class AltoClefCommands {
                 new DepositCommand(),
                 new StashCommand(),
                 new GotoCommand(),
+                new PriorityCommand(),
                 new IdleCommand(),
                 new WanderCommand(),
                 new AliveCommand(),

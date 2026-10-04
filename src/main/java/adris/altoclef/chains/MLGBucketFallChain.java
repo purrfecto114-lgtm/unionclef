@@ -90,6 +90,12 @@ public class MLGBucketFallChain extends SingleTaskChain implements ITaskOverride
         }
 
         if (isFalling(mod)) {
+            // audit angle 5: a fall that cannot hurt must NOT steal the body from
+            // combat (MobDefenseChain yields to a *real* MLG via willCatchFall now).
+            if (!willCatchFall(mod)) {
+                tryCollectWaterTimer.reset();
+                return Float.NEGATIVE_INFINITY;
+            }
             tryCollectWaterTimer.reset();
             setTask(new MLGBucketTask());
             lastMLG = (MLGBucketTask) mainTask;
@@ -205,6 +211,40 @@ public class MLGBucketFallChain extends SingleTaskChain implements ITaskOverride
         }
         double ySpeed = mod.getPlayer().getVelocity().y;
         return ySpeed < -0.7;
+    }
+
+    /**
+     * Will this chain actually GRAB the body for a bucket save right now?
+     * (audit angle 5, 2026-10-04.) Consumers that yield to MLG — most notably
+     * MobDefenseChain's NEGATIVE_INFINITY arm — must ask THIS, not the raw
+     * physical {@link #isFalling}: a combat knockback used to flip isFalling and
+     * both chains stood down while the fall was provably harmless.
+     */
+    public boolean willCatchFall(AltoClef mod) {
+        if (!isFalling(mod)) return false;
+        if (!mod.getModSettings().mlgBucketOnlyWhenHarmful()) return true;
+        return kaptainwutax.tungsten.util.MlgPolicy.fallWouldDealDamage(
+                mod.getPlayer().fallDistance, distanceToGroundBelow(mod), 3.0);
+    }
+
+    /** Projected distance from the player's feet to the first solid ground below.
+     *  Fluids are passed through on purpose: that biases towards TRIGGERING the save
+     *  (an MLG into water is harmless; a missed save onto stone is not). */
+    private double distanceToGroundBelow(AltoClef mod) {
+        try {
+            Entity e = mod.getPlayer();
+            var start = e.getPos();
+            var end = start.add(0, -64, 0);
+            var hit = mod.getWorld().raycast(new RaycastContext(
+                    start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, e));
+            if (hit instanceof net.minecraft.util.hit.BlockHitResult blockHit && hit.getType() != net.minecraft.util.hit.HitResult.Type.MISS) {
+                double d = start.y - blockHit.getPos().y;
+                return Math.max(0.0, d);
+            }
+        } catch (Throwable ignored) {
+        }
+        // No ground found within 64 blocks: fall distance itself decides.
+        return 64.0;
     }
 
     public boolean isInHellHole(AltoClef mod) {

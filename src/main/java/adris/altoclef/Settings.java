@@ -306,6 +306,14 @@ public class Settings implements IFailableConfigFile {
     private boolean autoMLGBucket = true;
 
     /**
+     * If true (audit fix 2026-10-04), the MLG bucket save only grabs the body when the
+     * current fall would actually deal damage (raycast to ground + accumulated fall
+     * distance). A harmless knockback hop then leaves combat control alone. Set false
+     * for the old any-fall-triggers behaviour.
+     */
+    private boolean mlgBucketOnlyWhenHarmful = true;
+
+    /**
      * Minimum fall distance (in blocks) before the bot will attempt
      * an enderpearl clutch save. Set with @set minPearlDistance <value>
      */
@@ -704,6 +712,10 @@ public class Settings implements IFailableConfigFile {
 
     public boolean shouldAutoMLGBucket() {
         return autoMLGBucket;
+    }
+
+    public boolean mlgBucketOnlyWhenHarmful() {
+        return mlgBucketOnlyWhenHarmful;
     }
 
     public double getMinPearlFallDistance() {

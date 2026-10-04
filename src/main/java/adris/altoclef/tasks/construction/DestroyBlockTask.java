@@ -816,7 +816,7 @@ public class DestroyBlockTask extends Task implements ITaskRequiresGrounded {
             stuckCheck.reset();
             isMining = true;
             // G52: a route still running under a miner that holds the body is nobody's.
-            adris.altoclef.tasks.movement.CustomBaritoneGoalTask.stopOrphanRoute();
+            adris.altoclef.tasks.movement.CustomTungstenGoalTask.stopOrphanRoute();
             // CLAIM THE AIM AND THE KEYS FOR THIS TICK, the way the placer already does.
             // Without this the walker steers the camera at its own waypoint in the same tick that
             // this task aims at the block, and a viewer sees the crosshair pointing one way while
@@ -935,7 +935,7 @@ public class DestroyBlockTask extends Task implements ITaskRequiresGrounded {
             // log, every ore, every block it ever breaks. Measured on the playthrough course: the
             // task chain sat on exactly this leaf while EVERY tungsten counter read zero
             // (mqStarted=0, called=0, staleRoot=0) and the bot did not move for ten minutes.
-            // GetToBlockTask extends CustomBaritoneGoalTask, so returning it here puts the walk on
+            // GetToBlockTask extends CustomTungstenGoalTask, so returning it here puts the walk on
             // the tungsten-primary driver like the rest of navigation.
             // ⛔⛔ THE GOAL WAS TO STAND INSIDE THE BLOCK IT IS TRYING TO BREAK.
             //

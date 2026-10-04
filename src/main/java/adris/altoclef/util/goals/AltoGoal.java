@@ -17,7 +17,7 @@ import net.minecraft.util.math.Vec3d;
  * <p>A goal only ever answers two questions, and neither of them needs a pathfinder:
  * <ul>
  *   <li>WHERE should the bot head? — {@link #target()}, which is what the tungsten drive already
- *       reduces every baritone goal to (see {@code CustomBaritoneGoalTask.goalToVec}, a chain of
+ *       reduces every baritone goal to (see {@code CustomTungstenGoalTask.goalToVec}, a chain of
  *       instanceof over six goal classes that exists purely to recover this vector);</li>
  *   <li>ARE WE THERE? — {@link #reached(BlockPos)}.</li>
  * </ul>

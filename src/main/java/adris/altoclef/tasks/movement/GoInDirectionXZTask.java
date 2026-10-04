@@ -6,7 +6,7 @@ import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.goals.AltoGoal;
 import net.minecraft.util.math.Vec3d;
 
-public class GoInDirectionXZTask extends CustomBaritoneGoalTask {
+public class GoInDirectionXZTask extends CustomTungstenGoalTask {
 
     private final Vec3d _origin;
     private final Vec3d _delta;

@@ -281,7 +281,7 @@ public class GetToEntityTask extends Task implements ITaskRequiresGrounded {
         // regardless of whether the block matched -- so only annoyingBlocks[0] (VINE) was ever
         // actually compared, and the other 13 entries (nether sprouts, cave/twisting/weeping
         // vines, ladder, dripleaf, tall/short grass, sweet berry bush) were silently never
-        // checked. Confirmed via the sibling CustomBaritoneGoalTask.isAnnoying() in this same
+        // checked. Confirmed via the sibling CustomTungstenGoalTask.isAnnoying() in this same
         // package, which uses the identical annoyingBlocks array and gets the loop right (return
         // true on a match, fall through to the instanceof checks only after the whole array is
         // exhausted). This method's own class comment says stuck-in-block recovery is needed

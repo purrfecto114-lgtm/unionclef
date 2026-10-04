@@ -23,7 +23,7 @@ import adris.altoclef.util.goals.AltoGoal;
  * which engine they address — a sweep that quietly alters semantics cannot be measured, and the
  * cancel calls in particular are load-bearing in ways that need their own pass (today
  * {@link #cancel()} stops the legacy engine and leaves a tungsten walk running, because that is
- * what the call sites currently do; the stuck-handler in CustomBaritoneGoalTask calls it every time
+ * what the call sites currently do; the stuck-handler in CustomTungstenGoalTask calls it every time
  * the progress checker trips, and stopping tungsten there would abort a healthy leg).
  *
  * <p>It is null-safe throughout, which the raw calls were not: {@code getClientBaritone()} returns

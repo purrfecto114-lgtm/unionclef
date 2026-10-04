@@ -12,7 +12,7 @@ import adris.altoclef.tasksystem.Task;
 import adris.altoclef.tasks.entity.AbstractKillEntityTask;
 import adris.altoclef.tasks.entity.CombatTask;
 import adris.altoclef.tasks.entity.KillEntitiesTask;
-import adris.altoclef.tasks.movement.CustomBaritoneGoalTask;
+import adris.altoclef.tasks.movement.CustomTungstenGoalTask;
 import adris.altoclef.tasks.movement.DodgeProjectilesTask;
 import adris.altoclef.tasks.movement.IdleTask;
 import adris.altoclef.tasks.movement.RunAwayFromCreepersTask;
@@ -385,7 +385,7 @@ public class MobDefenseChain extends SingleTaskChain {
     public static volatile int fireReleaseSkipped = 0;
 
     private boolean wasPuttingOutFire = false;
-    private CustomBaritoneGoalTask runAwayTask;
+    private CustomTungstenGoalTask runAwayTask;
     /** Flight needs a plan B. See the flee branch for what happens without one. */
     private net.minecraft.util.math.BlockPos fleeAnchor = null;
     private int fleeStuckTicks = 0;
@@ -844,8 +844,11 @@ public class MobDefenseChain extends SingleTaskChain {
         // Hunger is a request, not ownership of the hand. FoodChain refuses to eat
         // near enemies, so yielding merely because food is needed disables both
         // eating and defence. Yield only while eating is actually being attempted.
+        // audit angle 5 fix: yield to a *real* MLG save (willCatchFall), not to the raw
+        // physical isFalling — a harmless knockback hop used to stand down the whole
+        // defence stack while MLG never actually fired.
         if (mod.getFoodChain().isTryingToEat()
-                || mod.getMLGBucketChain().isFalling(mod)
+                || mod.getMLGBucketChain().willCatchFall(mod)
                 || !mod.getMLGBucketChain().doneMLG() || mod.getMLGBucketChain().isChorusFruiting()) {
             killAura.stopShielding(mod);
             stopShielding(mod);

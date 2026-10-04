@@ -6,7 +6,7 @@ import adris.altoclef.util.Dimension;
 import adris.altoclef.util.goals.AltoGoal;
 import adris.altoclef.util.helpers.WorldHelper;
 
-public class GetToYTask extends CustomBaritoneGoalTask {
+public class GetToYTask extends CustomTungstenGoalTask {
 
     private final int _yLevel;
     private final Dimension _dimension;

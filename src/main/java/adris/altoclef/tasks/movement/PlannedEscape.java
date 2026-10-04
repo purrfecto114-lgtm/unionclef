@@ -59,7 +59,7 @@ public final class PlannedEscape {
         kaptainwutax.tungsten.path.movements.MovementQueue.stop();
         var ex = kaptainwutax.tungsten.TungstenModDataContainer.EXECUTOR;
         if (ex != null) ex.stop = false;
-        BlockPos reach = lastPickWasLiveGoal ? CustomBaritoneGoalTask.lastGoalReachBlock : null;
+        BlockPos reach = lastPickWasLiveGoal ? CustomTungstenGoalTask.lastGoalReachBlock : null;
         if (reach != null) kaptainwutax.tungsten.task.FastNavigator.start(goal, reach);
         else kaptainwutax.tungsten.task.FastNavigator.start(goal);
         armedFrom = mod.getPlayer().getPos();
@@ -75,8 +75,8 @@ public final class PlannedEscape {
         net.minecraft.world.World w = mod.getWorld();
         lastPickWasLiveGoal = false;
         // 1. the live goal
-        Vec3d live = CustomBaritoneGoalTask.lastGoalVec;
-        if (live != null && System.currentTimeMillis() - CustomBaritoneGoalTask.lastGoalAtMs < 2000
+        Vec3d live = CustomTungstenGoalTask.lastGoalVec;
+        if (live != null && System.currentTimeMillis() - CustomTungstenGoalTask.lastGoalAtMs < 2000
                 && live.squaredDistanceTo(me) > 4.0) {
             escapeToGoal++;
             lastPickWasLiveGoal = true;
@@ -105,7 +105,7 @@ public final class PlannedEscape {
                     for (int dy = 0; dy <= 2; dy++) {
                         for (int sy : dy == 0 ? new int[]{0} : new int[]{dy, -dy}) {
                             int x = feet.getX() + dx, y = feet.getY() + sy, z = feet.getZ() + dz;
-                            if (CustomBaritoneGoalTask.standable(w, x, y, z)) {
+                            if (CustomTungstenGoalTask.standable(w, x, y, z)) {
                                 escapeToNearby++;
                                 return new Vec3d(x + 0.5, y, z + 0.5);
                             }

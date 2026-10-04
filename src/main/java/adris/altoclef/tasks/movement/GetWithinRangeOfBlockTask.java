@@ -5,7 +5,7 @@ import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.goals.AltoGoal;
 import net.minecraft.util.math.BlockPos;
 
-public class GetWithinRangeOfBlockTask extends CustomBaritoneGoalTask {
+public class GetWithinRangeOfBlockTask extends CustomTungstenGoalTask {
 
     public final BlockPos blockPos;
     public final int range;

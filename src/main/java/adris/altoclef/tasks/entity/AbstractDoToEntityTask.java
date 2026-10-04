@@ -211,7 +211,7 @@ public abstract class AbstractDoToEntityTask extends Task implements ITaskRequir
                 progress.reset();
                 closeCantHitEntity = null;   // we can hit it — the dead-zone budget must not count
                 // G52: a route still running under a strike that holds the body is nobody's.
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.stopOrphanRoute();
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.stopOrphanRoute();
                 return onEntityInteract(mod, entity);
             } else if (!tooClose) {
                 closeCantHitEntity = null;   // approaching, not stuck-close — reset the dead-zone budget

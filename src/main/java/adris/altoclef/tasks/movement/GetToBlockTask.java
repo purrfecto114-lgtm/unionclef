@@ -10,7 +10,7 @@ import adris.altoclef.util.helpers.WorldHelper;
 import adris.altoclef.util.time.TimerGame;
 import net.minecraft.util.math.BlockPos;
 
-public class GetToBlockTask extends CustomBaritoneGoalTask implements ITaskRequiresGrounded {
+public class GetToBlockTask extends CustomTungstenGoalTask implements ITaskRequiresGrounded {
 
     private final BlockPos _position;
     private final boolean _preferStairs;

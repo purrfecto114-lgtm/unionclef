@@ -441,7 +441,7 @@ public class UnstuckChain extends SingleTaskChain {
                 // a diagnostic never breaks the rescue
             }
             Debug.logMessage("Bot appears generally stuck (no movement for ~10s), triggering shimmy (cooldown=" + cooldownSec + "s, detection #" + consecutiveStuckDetections + ")"
-                    + " drive=" + adris.altoclef.tasks.movement.CustomBaritoneGoalTask.lastDriveNote
+                    + " drive=" + adris.altoclef.tasks.movement.CustomTungstenGoalTask.lastDriveNote
                     + " nav=" + kaptainwutax.tungsten.task.FastNavigator.isActive()
                     + " leaf=" + leaf);
             startedShimmying = true;

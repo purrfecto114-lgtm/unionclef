@@ -12,7 +12,7 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayList;
 import java.util.List;
 
-public class RunAwayFromCreepersTask extends CustomBaritoneGoalTask {
+public class RunAwayFromCreepersTask extends CustomTungstenGoalTask {
 
     private final double _distanceToRun;
 

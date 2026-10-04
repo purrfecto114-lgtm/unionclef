@@ -7,7 +7,7 @@ import net.minecraft.entity.Entity;
 import java.util.List;
 import java.util.function.Supplier;
 
-public abstract class RunAwayFromEntitiesTask extends CustomBaritoneGoalTask {
+public abstract class RunAwayFromEntitiesTask extends CustomTungstenGoalTask {
 
     private final Supplier<List<Entity>> _runAwaySupplier;
 

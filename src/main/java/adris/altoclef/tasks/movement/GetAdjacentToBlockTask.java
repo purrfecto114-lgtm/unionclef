@@ -23,7 +23,7 @@ import net.minecraft.util.math.BlockPos;
  * breakStair). Arrival is the adjacency test, or the miner's own: the block can be struck from
  * here.
  */
-public class GetAdjacentToBlockTask extends CustomBaritoneGoalTask implements ITaskRequiresGrounded {
+public class GetAdjacentToBlockTask extends CustomTungstenGoalTask implements ITaskRequiresGrounded {
 
     private final BlockPos block;
 

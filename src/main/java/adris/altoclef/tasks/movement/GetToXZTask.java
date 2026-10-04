@@ -7,7 +7,7 @@ import adris.altoclef.util.goals.AltoGoal;
 import adris.altoclef.util.helpers.WorldHelper;
 import net.minecraft.util.math.BlockPos;
 
-public class GetToXZTask extends CustomBaritoneGoalTask {
+public class GetToXZTask extends CustomTungstenGoalTask {
 
     private final int x, z;
     private final Dimension dimension;

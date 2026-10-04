@@ -21,7 +21,7 @@ import net.minecraft.world.RaycastContext;
 import java.util.Optional;
 import java.util.function.Predicate;
 
-public class EscapeFromLavaTask extends CustomBaritoneGoalTask {
+public class EscapeFromLavaTask extends CustomTungstenGoalTask {
 
     private final float strength;
     private int ticks = 0;

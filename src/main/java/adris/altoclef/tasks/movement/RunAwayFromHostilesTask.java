@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class RunAwayFromHostilesTask extends CustomBaritoneGoalTask {
+public class RunAwayFromHostilesTask extends CustomTungstenGoalTask {
 
     private final double distanceToRun;
     private final boolean includeSkeletons;
@@ -31,7 +31,7 @@ public class RunAwayFromHostilesTask extends CustomBaritoneGoalTask {
     /**
      * OFF BARITONE'S GOAL TYPE, AND IT IS THE LIVE READ THAT MADE THIS AWKWARD.
      *
-     * <p>{@code CustomBaritoneGoalTask} caches the goal object for the life of the task, so a
+     * <p>{@code CustomTungstenGoalTask} caches the goal object for the life of the task, so a
      * snapshot flee would send the bot to wherever the mobs stood when it started running and
      * leave it there. {@link AltoGoal.FleeLive} checks completion against live positions and supplies immutable threat snapshots
      * to the condition-goal planner. New searches never reuse a stale centroid.

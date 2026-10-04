@@ -20,7 +20,7 @@ import net.minecraft.util.math.BlockPos;
  * was never asked, because nothing on the entity path leads to it.
  *
  * <p>This task puts the drop on the SAME road the blocks travel: an {@link AltoGoal#block}
- * goal on the drop's cell through {@code CustomBaritoneGoalTask.driveTungstenPrimary}, whose
+ * goal on the drop's cell through {@code CustomTungstenGoalTask.driveTungstenPrimary}, whose
  * escalation ladder hands a goal the grid walker cannot reach to FastNavigator. Arrival is the
  * pickup itself -- the drop is gone, or the body is touching it -- since that is the only event
  * that ends a pickup; standing in the cell is merely how it comes about.
@@ -28,7 +28,7 @@ import net.minecraft.util.math.BlockPos;
  * <p>Only for a drop that has SETTLED (on the ground, not in water, not moving). A drop still
  * falling or floating downstream is a moving target and keeps the entity chase.
  */
-public class GetToDropTask extends CustomBaritoneGoalTask implements ITaskRequiresGrounded {
+public class GetToDropTask extends CustomTungstenGoalTask implements ITaskRequiresGrounded {
 
     /**
      * A drop counts as settled when it is on the ground, out of water and this slow HORIZONTALLY.

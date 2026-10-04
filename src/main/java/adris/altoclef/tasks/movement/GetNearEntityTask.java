@@ -24,7 +24,7 @@ import net.minecraft.entity.Entity;
  * escalation to FastNavigator when walking cannot reach -- and hands back to the entity task once
  * the target is close, where the physics chase and the straight walk do their job.
  */
-public class GetNearEntityTask extends CustomBaritoneGoalTask implements ITaskRequiresGrounded {
+public class GetNearEntityTask extends CustomTungstenGoalTask implements ITaskRequiresGrounded {
 
     private final Entity entity;
     private final int range;

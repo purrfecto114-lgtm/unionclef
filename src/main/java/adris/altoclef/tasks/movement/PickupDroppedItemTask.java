@@ -159,7 +159,7 @@ public class PickupDroppedItemTask extends AbstractDoToClosestObjectTask<ItemEnt
         // unconditionally on its FIRST iteration regardless of match, so only
         // annoyingBlocks[0] was ever actually compared and the other entries (nether
         // sprouts, cave/twisting/weeping vines, ladder, dripleaf, tall/short grass, sweet
-        // berry bush) were silently never checked. CustomBaritoneGoalTask.isAnnoying() in
+        // berry bush) were silently never checked. CustomTungstenGoalTask.isAnnoying() in
         // this same package has the correct loop shape this was ported from.
         Block block = mod.getWorld().getBlockState(pos).getBlock();
         if (annoyingBlocks != null) {

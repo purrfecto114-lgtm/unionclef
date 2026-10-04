@@ -7,7 +7,7 @@ import net.minecraft.util.math.BlockPos;
 
 import java.util.Arrays;
 
-public class RunAwayFromPositionTask extends CustomBaritoneGoalTask {
+public class RunAwayFromPositionTask extends CustomTungstenGoalTask {
 
     private final BlockPos[] _dangerBlocks;
     private final double _distance;

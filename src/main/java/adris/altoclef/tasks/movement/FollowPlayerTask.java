@@ -17,7 +17,7 @@ import adris.altoclef.tasksystem.Task;
  *   - the executor keeps running the current path DURING a re-plan, so the bot
  *     keeps moving instead of freezing.
  *
- * This replaces the old baritone route (GetToEntityTask -> CustomBaritoneGoalTask
+ * This replaces the old baritone route (GetToEntityTask -> CustomTungstenGoalTask
  * with TungstenHelper.primary defaulting false), whose failure mode on a moving
  * player was exactly "forever rebuilds the route and stands still". Tungsten-first
  * per the project directive; tungsten also handles player re-discovery

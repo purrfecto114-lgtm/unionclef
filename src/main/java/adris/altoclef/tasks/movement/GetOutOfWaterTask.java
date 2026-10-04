@@ -12,7 +12,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.item.Item;
 import net.minecraft.util.math.BlockPos;
 
-public class GetOutOfWaterTask extends CustomBaritoneGoalTask{
+public class GetOutOfWaterTask extends CustomTungstenGoalTask{
 
     private boolean startedShimmying = false;
     private final TimerGame shimmyTaskTimer = new TimerGame(5);

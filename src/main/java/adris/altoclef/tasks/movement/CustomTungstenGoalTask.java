@@ -16,9 +16,17 @@ import net.minecraft.block.*;
 import net.minecraft.util.math.BlockPos;
 
 /**
- * Turns a baritone goal into a task.
+ * Turns a navigation goal into a task, driven end-to-end by tungsten.
+ *
+ * <p>NAME, corrected 2026-10-04 (audit angle 4): this class was called
+ * {@code CustomBaritoneGoalTask}. The Baritone it was named for has not been
+ * compiled since the G-0 migration (2026-08-24) — the name outlived the engine
+ * and actively misled name-based tooling (an AI reading the tree concluded
+ * Baritone was still wired in). Renamed to match what it actually drives.
+ * Historical documents (TODOS.md, release notes, ai/ audits) keep the old name
+ * on purpose: they describe the past.
  */
-public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequiresGrounded {
+public abstract class CustomTungstenGoalTask extends Task implements ITaskRequiresGrounded {
 
     /** Entry and early-exit tallies for the tungsten branch; read over py4j in placeStats(). */
     public static volatile int pdEnter, pdNotPrimary, pdPillar, pdBridge, pdStuckGiveUp,
@@ -161,11 +169,11 @@ public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequir
 
     // This happens all the time in mineshafts and swamps/jungles
 
-    public CustomBaritoneGoalTask(boolean wander) {
+    public CustomTungstenGoalTask(boolean wander) {
         this.wander = wander;
     }
 
-    public CustomBaritoneGoalTask() {
+    public CustomTungstenGoalTask() {
         this(true);
     }
 
@@ -284,7 +292,7 @@ public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequir
         // ── Tungsten-PRIMARY (drop-in swap, TODO 13) ──
         if (driveTungstenPrimary(mod)) return null;
 
-        // ── Tungsten lock: exclusive 30s control, Baritone stays off ──
+        // ── Tungsten lock: exclusive 30s control, other drivers stay off ──
         if (TungstenHelper.isLocked()) {
             TungstenHelper.tickLock();
             Nav.cancel();
@@ -313,7 +321,8 @@ public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequir
                     return wanderTask;
                 }
                 if (!checker.check(mod)) {
-                    // Baritone failed — try Tungsten before wandering
+                    // tungsten stalled — fall back to wandering (wording fixed 2026-10-04:
+                    // this branch never involved Baritone; it IS tungsten, see audit angle 4)
                     if (cachedAlto != null) {
                         var player = mod.getPlayer();
                         var goalPos = new net.minecraft.util.math.Vec3d(
@@ -325,7 +334,7 @@ public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequir
                         if (t != null) goalPos = t;
                         if (TungstenHelper.tryPathTo(goalPos)) {
                             Nav.cancel();
-                            setDebugState("Baritone stuck, trying Tungsten...");
+                            setDebugState("Tungsten stalled, falling back to wandering...");
                             return null;
                         }
                     }
@@ -996,7 +1005,7 @@ public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequir
                     && !kaptainwutax.tungsten.path.PathFinder.searchHasEmitted) {
                 kaptainwutax.tungsten.path.PathFinder.stallSpared++;
             } else {
-                kaptainwutax.tungsten.path.PathFinder.noteStop("CustomBaritoneGoalTask@521");
+                kaptainwutax.tungsten.path.PathFinder.noteStop("CustomTungstenGoalTask@521");
                 if (pfU != null) pfU.stop.set(true);
                 if (exU != null) exU.stop = true;
             }
@@ -1113,7 +1122,7 @@ public abstract class CustomBaritoneGoalTask extends Task implements ITaskRequir
                     && !kaptainwutax.tungsten.path.PathFinder.searchHasEmitted) {
                 kaptainwutax.tungsten.path.PathFinder.stallSpared++;
             } else {
-                kaptainwutax.tungsten.path.PathFinder.noteStop("CustomBaritoneGoalTask@609");
+                kaptainwutax.tungsten.path.PathFinder.noteStop("CustomTungstenGoalTask@609");
                 if (pfR != null) { pfR.stop.set(true); pfR.overrideStartPos = null; }
                 if (exR != null) exR.stop = true;
             }

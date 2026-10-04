@@ -1,7 +1,7 @@
 package adris.altoclef.tasksystem;
 
 import adris.altoclef.AltoClef;
-import adris.altoclef.tasks.movement.CustomBaritoneGoalTask;
+import adris.altoclef.tasks.movement.CustomTungstenGoalTask;
 import com.google.gson.Gson;
 import kaptainwutax.tungsten.TungstenModDataContainer;
 import kaptainwutax.tungsten.agent.Agent;
@@ -144,7 +144,7 @@ public final class TaskMovementTrace {
             row.put("flee", kaptainwutax.tungsten.task.RunAwayTask.isActive());
             row.put("punk", kaptainwutax.tungsten.task.PunkPlayerTask.isActive());
             row.put("route", BlockPathWalker.describeAgainstRoute(player.getBlockPos()));
-            row.put("driveAgeMs", System.currentTimeMillis() - CustomBaritoneGoalTask.lastDriveTickMs);
+            row.put("driveAgeMs", System.currentTimeMillis() - CustomTungstenGoalTask.lastDriveTickMs);
             var chain = AltoClef.getInstance().getTaskRunner().getCurrentTaskChain();
             row.put("tasks", chain == null ? List.of() : chain.getTasks().stream()
                     .map(task -> task.getClass().getSimpleName()).toList());

@@ -9,7 +9,7 @@ import net.minecraft.util.math.BlockPos;
 import java.util.Collection;
 
 /** Reach any exact feet cell through the ordinary Tungsten movement graph. */
-public final class GetToAnyBlockTask extends CustomBaritoneGoalTask implements ITaskRequiresGrounded {
+public final class GetToAnyBlockTask extends CustomTungstenGoalTask implements ITaskRequiresGrounded {
     private final AltoGoal.AnyBlock destinations;
 
     public GetToAnyBlockTask(Collection<BlockPos> positions) {

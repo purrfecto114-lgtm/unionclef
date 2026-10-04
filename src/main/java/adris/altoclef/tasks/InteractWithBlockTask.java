@@ -174,8 +174,8 @@ public class InteractWithBlockTask extends Task {
         // other entry in `annoyingBlocks` was silently never checked. Same copy-paste bug just
         // found and fixed in the sibling GetToEntityTask.isAnnoying()/PickupDroppedItemTask.
         // isAnnoying() this session (git blame shows it was already found and fixed once before in
-        // CustomBaritoneGoalTask/TimeoutWanderTask, but the fix never propagated to these copies).
-        // Fixed to match CustomBaritoneGoalTask.isAnnoying()'s correct shape: loop through all
+        // CustomTungstenGoalTask/TimeoutWanderTask, but the fix never propagated to these copies).
+        // Fixed to match CustomTungstenGoalTask.isAnnoying()'s correct shape: loop through all
         // entries, return true on the first match, false only once the loop is exhausted.
         Block block = mod.getWorld().getBlockState(pos).getBlock();
         if (annoyingBlocks != null) {
@@ -472,7 +472,7 @@ public class InteractWithBlockTask extends Task {
         if (reachable.isPresent()) {
             // G52: a route still running under a click that holds the body is nobody's (the
             // 17:22 recording: an orphaned tower aimed down while this aimed up at the table).
-            adris.altoclef.tasks.movement.CustomBaritoneGoalTask.stopOrphanRoute();
+            adris.altoclef.tasks.movement.CustomTungstenGoalTask.stopOrphanRoute();
             if (Task.diagnosticEvents != null) Task.noteDiagnostic("interaction-reachable " + target.toShortString());
             // Check if an entity (hologram, armor stand, etc.) is blocking our click
             if (MinecraftClient.getInstance().targetedEntity != null) {

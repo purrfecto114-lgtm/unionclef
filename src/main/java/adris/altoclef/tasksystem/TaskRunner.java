@@ -61,6 +61,24 @@ public class TaskRunner {
         }
 
         // Get highest priority chain and run
+        //
+        // ── PRIORITY LADDER (audit angle 5, documented 2026-10-04) ──────────────
+        // Ties break by REGISTRATION order (AltoClef.java):
+        //   GameMenu → User → MobDefense → Death → PlayerInteractionFix → MLG →
+        //   Unstuck → PreEquip → WorldSurvival → Food
+        //   100   WorldSurvival lava / fire / air · MLG bucket (harmful falls only
+        //         since the willCatchFall gate) · MobDefense creeper fuse (50+fuse*50)
+        //    90   GameMenu · WorldSurvival water-bucket / find-water
+        //    80   MobDefense "can't deal with it" flee (+ sticky replay)
+        //   65-70 MobDefense regular arms (dodge/flee/attack/cover)
+        //    55   Food · Unstuck
+        //    50   UserTaskChain DEFAULT — runtime-changeable via @priority, and tasks
+        //         themselves may push it (MurderMystery 80, MacePunch +inf)
+        //    51   SupervisorTaskChain — ⚠️ DORMANT: never instantiated anywhere, the
+        //         tier is dead until someone registers it on purpose.
+        // UserTaskChain carries chat commands (@) AND external agent commands
+        // (py4j runUserTask). If an external agent must not be preempted mid-task,
+        // raise its priority via @priority (self-preservation 100 stays above).
         TaskChain maxChain = null;
         float maxPriority = Float.NEGATIVE_INFINITY;
         for (TaskChain chain : chains) {

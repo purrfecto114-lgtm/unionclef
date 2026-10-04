@@ -6,7 +6,7 @@ import adris.altoclef.util.goals.AltoGoal;
 import adris.altoclef.util.progresscheck.MovementProgressChecker;
 import net.minecraft.util.math.ChunkPos;
 
-public class GetToChunkTask extends CustomBaritoneGoalTask {
+public class GetToChunkTask extends CustomTungstenGoalTask {
 
     private final ChunkPos _pos;
 

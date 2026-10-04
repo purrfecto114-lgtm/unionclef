@@ -7,7 +7,7 @@ import adris.altoclef.util.helpers.ProjectileHelper;
 import net.minecraft.util.math.Vec3d;
 import adris.altoclef.tasksystem.Task;
 
-public class DodgeProjectilesTask extends CustomBaritoneGoalTask {
+public class DodgeProjectilesTask extends CustomTungstenGoalTask {
 
     private final double _distanceHorizontal;
     private final double _distanceVertical;
@@ -69,7 +69,7 @@ public class DodgeProjectilesTask extends CustomBaritoneGoalTask {
      * that nothing called it yet. This is the first caller.
      *
      * <p>LIMITATION, STATED RATHER THAN HIDDEN: NearestSatisfying takes a FIXED origin, and
-     * CustomBaritoneGoalTask caches the goal, so the search always expands from where the bot
+     * CustomTungstenGoalTask caches the goal, so the search always expands from where the bot
      * stood when the dodge began. The predicate is live — it re-reads the projectiles every tick —
      * but the origin is not. That is tolerable here only because the task carries a timeout
      * ({@code DODGE_TIMEOUT_MS}) and is recreated; it would not be tolerable for a long-lived goal.

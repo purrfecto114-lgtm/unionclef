@@ -945,8 +945,8 @@ public class Py4jEntryPoint {
             List<net.minecraft.util.math.BlockPos> route = kaptainwutax.tungsten.task.BlockPathWalker.routeForOverlay();
             boolean walkerOn = kaptainwutax.tungsten.task.BlockPathWalker.isRunning();
             boolean queueOn = kaptainwutax.tungsten.path.movements.MovementQueue.isRunning();
-            Vec3d driveGoal = adris.altoclef.tasks.movement.CustomBaritoneGoalTask.lastGoalVec;
-            long driveAt = adris.altoclef.tasks.movement.CustomBaritoneGoalTask.lastGoalAtMs;
+            Vec3d driveGoal = adris.altoclef.tasks.movement.CustomTungstenGoalTask.lastGoalVec;
+            long driveAt = adris.altoclef.tasks.movement.CustomTungstenGoalTask.lastGoalAtMs;
             boolean driveFresh = driveGoal != null
                     && System.currentTimeMillis() - driveAt <= DRIVE_GOAL_FRESH_MS;
 
@@ -2720,29 +2720,29 @@ public class Py4jEntryPoint {
         // The nav-branch tallies zero here too, or they are container-lifetime sums wearing a
         // per-run label: three runs in a row reported pdNoVec=238 while pdEnter climbed, and the
         // only thing that ever really zeroed them was a client restart on redeploy.
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdEnter = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNotPrimary = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPillar = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdBridge = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdStuckGiveUp = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdWalking = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNear = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdEnter = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNotPrimary = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPillar = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdBridge = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdStuckGiveUp = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdWalking = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNear = 0;
         adris.altoclef.tasks.movement.GetToEntityTask.entityReleased = 0;
         adris.altoclef.tasks.movement.GetToEntityTask.entityWandered = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNoGoal = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFinished = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNoVec = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLegacyToTungsten = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLegacyDeclined = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLegacyPath = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdStallWalker = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdStallReset = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdQueueTooShort = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNearBusy = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNearFind = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPlanning = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPlanGiveUp = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPlanNoReset = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNoGoal = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFinished = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNoVec = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLegacyToTungsten = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLegacyDeclined = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLegacyPath = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdStallWalker = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdStallReset = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdQueueTooShort = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNearBusy = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNearFind = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPlanning = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPlanGiveUp = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPlanNoReset = 0;
         kaptainwutax.tungsten.path.PathExecutor.execArrived = 0;
         kaptainwutax.tungsten.path.PathExecutor.execRanOut = 0;
         kaptainwutax.tungsten.path.PathExecutor.replayLiveChecks = 0;
@@ -3060,11 +3060,11 @@ public class Py4jEntryPoint {
         kaptainwutax.tungsten.path.PathFinder.goalTests = 0;
         kaptainwutax.tungsten.path.PathFinder.nearestApproachCm = 0;
         kaptainwutax.tungsten.path.PathFinder.lastGoalPair = "-";
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapAsked = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapMoved = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapFailed = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapToSelf = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.arrivedAtSnap = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapAsked = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapMoved = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapFailed = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapToSelf = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.arrivedAtSnap = 0;
         kaptainwutax.tungsten.path.PathFinder.guideInfo = "-";
         kaptainwutax.tungsten.path.PathFinder.guideIdxReached = 0;
         kaptainwutax.tungsten.path.PathFinder.relaxedGuideDropped = 0;
@@ -3227,16 +3227,16 @@ public class Py4jEntryPoint {
         adris.altoclef.tasks.movement.PickupDroppedItemTask.dropBlockGoal = 0;
         adris.altoclef.tasks.movement.PickupDroppedItemTask.dropBuildHeld = 0;
         adris.altoclef.tasks.movement.PickupDroppedItemTask.dropFailRetargeted = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFnBuild = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNearBuild = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapRefusedSelf = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFnAdopted = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFnStale = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdRouteStopped = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFnBuild = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNearBuild = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapRefusedSelf = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFnAdopted = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFnStale = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdRouteStopped = 0;
         adris.altoclef.tasks.AbstractDoToClosestObjectTask.dcIdleRearmed = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdDigArmed = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdDigHeld = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdDigOnTop = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdDigArmed = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdDigHeld = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdDigOnTop = 0;
         kaptainwutax.tungsten.task.BlockPathWalker.walkerHeldAboveWp = 0;
         kaptainwutax.tungsten.task.FastNavigator.navStartFromSupport = 0;
         kaptainwutax.tungsten.task.FastNavigator.navCeilingMined = 0;
@@ -3294,7 +3294,7 @@ public class Py4jEntryPoint {
         adris.altoclef.control.KillAura.kaAuraOutOfReach = 0;
         adris.altoclef.control.KillAura.kaAuraEquip = 0;
         adris.altoclef.tasks.resources.MineAndCollectTask.MineOrCollectTask.dropDeepRepriced = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdRouteRefused = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdRouteRefused = 0;
         kaptainwutax.tungsten.path.fast.FastPlanner.planCreeperRefused = 0;
         kaptainwutax.tungsten.path.fast.FastPlanner.planCreeperPriced = 0;
         adris.altoclef.tasks.construction.DestroyBlockTask.dbToolEquipped = 0;
@@ -3306,7 +3306,7 @@ public class Py4jEntryPoint {
         kaptainwutax.tungsten.path.fast.FastPlanner.planPillarInsideRefused = 0;
         kaptainwutax.tungsten.path.fast.FastPlanner.planPillarFeetCleared = 0;
         adris.altoclef.tasks.InteractWithBlockTask.iwStallFailed = 0;
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdGoalLeft = 0;
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdGoalLeft = 0;
         adris.altoclef.tasks.movement.GetToDropTask.dropMoved = 0;
         adris.altoclef.tasks.movement.PickupDroppedItemTask.puWoodFirst = 0;
         adris.altoclef.tasks.movement.PickupDroppedItemTask.puFeedsSkipped = 0;
@@ -3348,7 +3348,7 @@ public class Py4jEntryPoint {
         kaptainwutax.tungsten.path.fast.FastPlanner.planAtGoalExact = 0;
         kaptainwutax.tungsten.path.fast.FastPlanner.planAtGoalYTol = 0;
         kaptainwutax.tungsten.path.fast.FastPlanner.clearAtGoalWho();
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.clearSnapToSelfWho();
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.clearSnapToSelfWho();
         kaptainwutax.tungsten.task.FastNavigator.navEmptyRes = 0;
         kaptainwutax.tungsten.task.FastNavigator.navIncomplete = 0;
         kaptainwutax.tungsten.task.FastNavigator.navDeadEnd = 0;
@@ -3678,27 +3678,27 @@ public class Py4jEntryPoint {
                 kaptainwutax.tungsten.path.movements.MovementQueue.qTicks,
                 kaptainwutax.tungsten.path.movements.MovementQueue.getIndex(),
                 kaptainwutax.tungsten.path.movements.MovementQueue.size(),
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdEnter,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNotPrimary,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPillar,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdBridge,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdStuckGiveUp,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdWalking,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNear,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNoGoal,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFinished,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNoVec,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdStallWalker,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdStallReset,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdQueueTooShort,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNearBusy,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNearFind,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPlanning,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPlanGiveUp,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdPlanNoReset,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLegacyPath,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLegacyToTungsten,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLegacyDeclined,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdEnter,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNotPrimary,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPillar,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdBridge,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdStuckGiveUp,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdWalking,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNear,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNoGoal,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFinished,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNoVec,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdStallWalker,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdStallReset,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdQueueTooShort,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNearBusy,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNearFind,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPlanning,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPlanGiveUp,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdPlanNoReset,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLegacyPath,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLegacyToTungsten,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLegacyDeclined,
                 kaptainwutax.tungsten.path.PathExecutor.execArrived,
                 kaptainwutax.tungsten.path.PathExecutor.execRanOut,
                 // sprinted / total executor ticks. The sprint is chosen by the PATH NODE
@@ -3715,7 +3715,7 @@ public class Py4jEntryPoint {
                 adris.altoclef.control.Nav.oreCoalNearest,
                 adris.altoclef.control.Nav.oreIronNearest,
                 adris.altoclef.tasks.movement.GetToEntityTask.nearLockDropped,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdLastUnknownGoal,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdLastUnknownGoal,
                 adris.altoclef.tasks.construction.DestroyBlockTask.dbTick,
                 adris.altoclef.tasks.construction.DestroyBlockTask.dbUnreachMove,
                 adris.altoclef.tasks.construction.DestroyBlockTask.dbUnreachWater,
@@ -3818,16 +3818,16 @@ public class Py4jEntryPoint {
                 adris.altoclef.tasks.movement.PickupDroppedItemTask.dropBlockGoal,
                 adris.altoclef.tasks.movement.PickupDroppedItemTask.dropBuildHeld,
                 adris.altoclef.tasks.movement.PickupDroppedItemTask.dropFailRetargeted,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFnBuild,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdNearBuild,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapRefusedSelf,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFnAdopted,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdFnStale,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdRouteStopped,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFnBuild,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdNearBuild,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapRefusedSelf,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFnAdopted,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdFnStale,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdRouteStopped,
                 adris.altoclef.tasks.AbstractDoToClosestObjectTask.dcIdleRearmed,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdDigArmed,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdDigHeld,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdDigOnTop,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdDigArmed,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdDigHeld,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdDigOnTop,
                 kaptainwutax.tungsten.task.BlockPathWalker.walkerHeldAboveWp,
                 kaptainwutax.tungsten.task.FastNavigator.navStartFromSupport,
                 kaptainwutax.tungsten.task.FastNavigator.navCeilingMined,
@@ -3885,7 +3885,7 @@ public class Py4jEntryPoint {
                 adris.altoclef.control.KillAura.kaAuraOutOfReach,
                 adris.altoclef.control.KillAura.kaAuraEquip,
                 adris.altoclef.tasks.resources.MineAndCollectTask.MineOrCollectTask.dropDeepRepriced,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdRouteRefused,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdRouteRefused,
                 kaptainwutax.tungsten.path.fast.FastPlanner.planCreeperRefused,
                 kaptainwutax.tungsten.path.fast.FastPlanner.planCreeperPriced,
                 adris.altoclef.tasks.construction.DestroyBlockTask.dbToolEquipped,
@@ -3897,7 +3897,7 @@ public class Py4jEntryPoint {
                 kaptainwutax.tungsten.path.fast.FastPlanner.planPillarInsideRefused,
                 kaptainwutax.tungsten.path.fast.FastPlanner.planPillarFeetCleared,
                 adris.altoclef.tasks.InteractWithBlockTask.iwStallFailed,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.pdGoalLeft,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.pdGoalLeft,
                 adris.altoclef.tasks.movement.GetToDropTask.dropMoved,
                 adris.altoclef.tasks.movement.PickupDroppedItemTask.puWoodFirst,
                 adris.altoclef.tasks.movement.PickupDroppedItemTask.puFeedsSkipped,
@@ -4084,12 +4084,12 @@ public class Py4jEntryPoint {
                 kaptainwutax.tungsten.path.PathFinder.goalTests,
                 kaptainwutax.tungsten.path.PathFinder.nearestApproachCm,
                 kaptainwutax.tungsten.path.PathFinder.lastGoalPair,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapAsked,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapMoved,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapFailed,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapToSelf,
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.snapToSelfDump(),
-                adris.altoclef.tasks.movement.CustomBaritoneGoalTask.arrivedAtSnap,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapAsked,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapMoved,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapFailed,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapToSelf,
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.snapToSelfDump(),
+                adris.altoclef.tasks.movement.CustomTungstenGoalTask.arrivedAtSnap,
                 kaptainwutax.tungsten.path.PathFinder.guideInfo,
                 kaptainwutax.tungsten.path.PathFinder.guideIdxReached,
                 kaptainwutax.tungsten.path.PathFinder.relaxedGuideDropped,

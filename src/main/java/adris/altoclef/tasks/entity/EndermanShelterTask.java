@@ -182,7 +182,7 @@ public class EndermanShelterTask extends Task {
         }
         if (base != null && PillarTask.isActive()) {
             holding = true;
-            adris.altoclef.tasks.movement.CustomBaritoneGoalTask.claimRoute();
+            adris.altoclef.tasks.movement.CustomTungstenGoalTask.claimRoute();
             setDebugState("Pillaring up to fight endermen");
             return null;
         }
@@ -225,7 +225,7 @@ public class EndermanShelterTask extends Task {
         }
         pillarStarts++;
         PillarTask.startTo(base.getY() + HEIGHT, null, base.getX(), base.getZ());
-        adris.altoclef.tasks.movement.CustomBaritoneGoalTask.claimRoute();
+        adris.altoclef.tasks.movement.CustomTungstenGoalTask.claimRoute();
         lastBase = base;
         holding = true;
         setDebugState("Pillaring up to fight endermen");
