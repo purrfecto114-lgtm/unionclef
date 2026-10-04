@@ -26,17 +26,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
       - name: Set up JDK 17 (preprocessor toolchain)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Set up JDK 21 (build toolchain — must be LAST so JAVA_HOME points at it)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
 
       - name: Setup Gradle (cache wrapper + dependencies)
         uses: gradle/actions/setup-gradle@v4
@@ -45,8 +45,13 @@ jobs:
         run: |
           git clone --quiet https://github.com/ReplayMod/preprocessor.git "$RUNNER_TEMP/preprocessor"
           git -C "$RUNNER_TEMP/preprocessor" checkout --quiet 1678b67
-          (cd "$RUNNER_TEMP/preprocessor" && gradle publishToMavenLocal --console=plain \
+          # upstream publishes this tree as version "SNAPSHOT"; the root project pins
+          # "1678b67" (the audited commit), so pin the publication to the same string.
+          sed -i 's/^version = "SNAPSHOT"$/version = "1678b67"/' "$RUNNER_TEMP/preprocessor/build.gradle.kts"
+          (cd "$RUNNER_TEMP/preprocessor" && ./gradlew publishToMavenLocal --console=plain \
             -Dorg.gradle.java.installations.paths="$JAVA_HOME_17_X64")
+          test -f "$HOME/.m2/repository/com/github/replaymod/preprocessor/1678b67/preprocessor-1678b67.jar" \
+            || { echo '::error::preprocessor 1678b67 missing from mavenLocal — bootstrap failed'; exit 1; }
 
       - name: Run tungsten pure-logic unit tests
         run: ./gradlew :tungsten:test --no-daemon
