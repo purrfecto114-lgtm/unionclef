@@ -198,7 +198,7 @@ if (project.name == "1.21.1" || project.name == "1.21.11") {
     def releaseAssetFiles = files(
         { remapJar.archiveFile.get().asFile },
         // G-0: shredder is no longer built or shipped.
-        { new File(rootProject.projectDir, "tungsten/build/libs/tungsten-BETA-1.0.0.jar") },
+        { new File(rootProject.projectDir, "tungsten/build/libs/tungsten-BETA-1.0.1.jar") },
     )
 
     def releaseBodyProvider = provider {

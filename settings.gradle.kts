@@ -1,5 +1,9 @@
 pluginManagement {
     repositories {
+        // ucfix 2026-10-04: jitpack cannot serve com.github.replaymod:preprocessor:1678b67
+        // (404). The plugin is built from source into ~/.m2 locally and by CI bootstrap;
+        // mavenLocal() is consulted first for exactly that artifact.
+        mavenLocal()
         maven("https://maven.fabricmc.net")
         mavenCentral()
         gradlePluginPortal()

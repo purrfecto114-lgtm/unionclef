@@ -2,9 +2,15 @@ name: build
 
 # Added 2026-10-04 (audit angle 10: the repo had zero build CI — only wiki sync).
 # Compiles every version subproject (tungsten + the three altoclef targets) and
-# runs the tungsten pure-logic unit tests. This is the check the audit's
-# "versions/ empty dirs" and "jitpack preprocessor 404" findings would have
-# surfaced the day they were introduced instead of weeks later.
+# runs the tungsten pure-logic unit tests.
+#
+# ucfix 2026-10-04 rework:
+#  - gradle-wrapper.jar is committed now, so ./gradlew works on clean runners.
+#  - jitpack cannot serve com.github.replaymod:preprocessor:1678b67 (permanent 404),
+#    so this workflow bootstraps the plugin from source into ~/.m2 before building;
+#    settings.gradle.kts consults mavenLocal() first for exactly that artifact.
+#  - Also produces the remapped mod jars for all three MC versions and uploads
+#    them as artifacts, so a green build means downloadable, testable jars.
 
 on:
   push:
@@ -26,23 +32,42 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up JDK 17 (preprocessor toolchain)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Setup Gradle (cache wrapper + dependencies)
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Compile tungsten (standalone pathfinder, MC 1.21.11 mappings)
-        run: ./gradlew :tungsten:compileJava --no-daemon --stacktrace
+      - name: Bootstrap preprocessor into mavenLocal (jitpack 404 workaround)
+        run: |
+          git clone --quiet https://github.com/ReplayMod/preprocessor.git "$RUNNER_TEMP/preprocessor"
+          git -C "$RUNNER_TEMP/preprocessor" checkout --quiet 1678b67
+          (cd "$RUNNER_TEMP/preprocessor" && gradle publishToMavenLocal --console=plain \
+            -Dorg.gradle.java.installations.paths="$JAVA_HOME_17_X64")
 
       - name: Run tungsten pure-logic unit tests
         run: ./gradlew :tungsten:test --no-daemon
 
-      - name: Compile altoclef 1.21.1 (main source tree)
-        run: ./gradlew :1.21.1:compileJava --no-daemon --stacktrace
+      - name: Compile + remap altoclef 1.21.11 (upstream release target)
+        run: ./gradlew :1.21.11:build --no-daemon --stacktrace
 
-      - name: Compile altoclef 1.21
-        run: ./gradlew :1.21:compileJava --no-daemon --stacktrace
+      - name: Compile + remap altoclef 1.21.1
+        run: ./gradlew :1.21.1:build --no-daemon --stacktrace
 
-      - name: Compile altoclef 1.21.11
-        run: ./gradlew :1.21.11:compileJava --no-daemon --stacktrace
+      - name: Compile + remap altoclef 1.21
+        run: ./gradlew :1.21:build --no-daemon --stacktrace
+
+      - name: Upload built mod jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jars
+          path: |
+            versions/*/build/libs/*.jar
+            tungsten/build/libs/*.jar
+          retention-days: 14
 
       - name: Upload test results on failure
         if: failure()
