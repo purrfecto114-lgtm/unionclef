@@ -1372,7 +1372,11 @@ public abstract class CustomTungstenGoalTask extends Task implements ITaskRequir
                 if (kaptainwutax.tungsten.task.BlockPathWalker.DEBUG)
                     Debug.logMessage("primDrive asyncKick busy" + busy);
                 if (!busy && pf != null) { if (ex != null) ex.stop = false; pf.find(mod.getWorld(), gp, mod.getPlayer()); }
-                Nav.cancel();
+                // ⛔ NO cancel() HERE (audit angle 3, 2026-10-04). This line WAS the G-0
+                // same-tick stall: kick the search, then cancel() — which is now real —
+                // would kill it the same tick, every tick (pdEnter=1921, mqStarted=0).
+                // The kick itself IS the claim of ownership; nothing here owns the
+                // executor afterwards, and the search's stop flag stays down.
                 // ⛔ DO NOT PET THE WATCHDOG FROM THE BRANCH THAT IS FAILING.
                 //
                 // checker.reset() stood here, and this branch by definition produced no movement --
@@ -1465,7 +1469,10 @@ public abstract class CustomTungstenGoalTask extends Task implements ITaskRequir
         } catch (Throwable t) {
             Debug.logInternal("[swap] tungsten primary drive failed: " + t);
         }
-        Nav.cancel();
+        // ⛔ NO cancel() HERE either (same audit angle 3 fix): a kick happened above on
+        // some ticks of this branch — a real cancel after it would revive the G-0
+        // kick/kill loop. The defensive "keep other drivers off" intent is served by
+        // the busy guard and the 600 ms rate gate, not by stopping what we just started.
         checker.reset();
         setDebugState("Tungsten (primary) pathfinding...");
         // PLANNING THAT NEVER BECOMES A ROUTE IS NOT DRIVING, AND MUST NOT HOLD THE TICK.

@@ -97,6 +97,34 @@ public class TungstenConfig {
      */
     public boolean inputArbiterEnforce = false;
 
+    // ── Nav real-semantics wiring (audit angle 3, 2026-10-04) ──────────────────
+    // The five Nav no-ops (cancel/clearGoal/pause/cancelEverything/stopExploring)
+    // get real behaviour, each with its own kill switch so a course can A/B one
+    // without the others. Defaults ON — that is the point of the wiring — but the
+    // G-0 history (22/22 -> 15/22 when cancel/pause were wired naively) demanded
+    // that every one of these be independently revertable.
+
+    /**
+     * Nav.cancel() / clearGoal() / stopExploring() actually abandon the current
+     * physical attempt: TungstenHelper.stop() (search stop flag + executor stop
+     * flag at its own tick boundary + 30 s lock cleared). The kick-then-cancel
+     * pairs inside driveTungstenPrimary were removed as part of this change —
+     * they were the G-0 same-tick stall. False restores the historical no-op.
+     */
+    public boolean navRealCancel = true;
+
+    /**
+     * Nav.pause() actually stills the body for {@link #navPauseTicks}: releases
+     * the five movement keys and gates the navigation drivers (navigator, queue,
+     * walker, executor) at the mixin, while combat primitives (bow, shield,
+     * dodge) keep running — the five callers are all combat/screen actions that
+     * need the body still. False restores the historical no-op.
+     */
+    public boolean navRealPause = true;
+
+    /** How long Nav.pause() holds the body still, in game ticks. */
+    public int navPauseTicks = 3;
+
     /** If true: enable trail-following when target escapes (dist>20).
      *  If false: always pathfind directly to target position. */
     public boolean enableTrailing = false;

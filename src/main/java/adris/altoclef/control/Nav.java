@@ -19,12 +19,14 @@ import adris.altoclef.util.goals.AltoGoal;
  *
  * <h2>What it deliberately does not do</h2>
  *
- * It does not change behaviour. Each method does exactly what the call sites do today, including
- * which engine they address — a sweep that quietly alters semantics cannot be measured, and the
- * cancel calls in particular are load-bearing in ways that need their own pass (today
- * {@link #cancel()} stops the legacy engine and leaves a tungsten walk running, because that is
- * what the call sites currently do; the stuck-handler in CustomTungstenGoalTask calls it every time
- * the progress checker trips, and stopping tungsten there would abort a healthy leg).
+ * From 2026-10-04 (audit angle 3) it DOES change behaviour: the five no-ops are wired, each
+ * behind its own TungstenConfig kill switch (navRealCancel / navRealPause). The G-0 lesson is
+ * baked into the design: cancel() stops the PHYSICAL attempt via TungstenHelper.stop() — the
+ * executor stops at its own tick boundary, the navigator/queue/walker layers are untouched —
+ * and the same-tick kick+cancel pair inside driveTungstenPrimary (the actual G-0 stall:
+ * pdEnter=1921, mqStarted=0) was removed rather than made "safe". pause() gates the navigation
+ * drivers at the mixin while combat primitives keep running. If a course regresses, flip the
+ * flag for the one method, not the whole file.
  *
  * <p>It is null-safe throughout, which the raw calls were not: {@code getClientBaritone()} returns
  * null when the engine did not initialise, and a task that cancels pathing on that path threw.
@@ -36,26 +38,38 @@ public final class Nav {
 
     // engine() REMOVED (G-0, 2026-08-24): there is no second engine to return.
 
+    /** Times the real cancel actually stopped a physical attempt. Read as navRealCancelRuns. */
+    public static volatile int cancelRuns;
+
     /** Stop navigating. Safe to call when nothing is. */
     public static void cancel() {
-        // G-0: tungsten is the only engine now. Cancelling means stopping tungsten.
-        // ⛔ THIS WAS A NO-OP AND MUST STAY ONE. Same trap as Nav.pause(), which cost every
-        // pickup course before it was caught: the line here addressed the LEGACY engine, and that
-        // engine had not been pathing for months, so the call did nothing at all.
-        //
-        // G-0 replaced it with TungstenHelper.stop(), which turns 35 call sites of Nav.cancel()
-        // into 35 places that kill the live pathfinder. The worst of them is inside
-        // driveTungstenPrimary itself:
+        // HISTORY (kept because it is the map of every trap here): G-0 wired this to
+        // TungstenHelper.stop() and 35 call sites became 35 places that kill the live
+        // pathfinder — the worst inside driveTungstenPrimary itself:
         //
         //     if (!busy && pf != null) { pf.find(...); }   // kick the async search
         //     Nav.cancel();                                // and immediately stop it
         //
-        // The search is started and killed on the same tick, every tick. That is the stall the
-        // repro reproduces: pdEnter=1921, pdWalking=0, mqStarted=0, and 135 completed breaks
-        // without a single step.
+        // The search was started and killed on the same tick, every tick: pdEnter=1921,
+        // mqStarted=0, 135 completed breaks without a single step. Reverted to a no-op
+        // restored craft 15/22 -> 21/22.
         //
-        // Cancelling tungsten deliberately is what TungstenHelper.stop() is FOR, and the places
-        // that mean it call it directly.
+        // WIRED 2026-10-04 (audit angle 3), with the trap disarmed at its source:
+        // the kick branches no longer call cancel() at all (they now count pdKickKept),
+        // so the remaining 38 call sites get the semantics they were written for —
+        // "abandon THIS attempt": search stop flag, executor stop flag (consumed at
+        // the executor's own tick boundary, not a mid-tick kill), 30 s lock cleared.
+        // Navigator/queue/walker are NOT torn down — cancelAll() (there is no goal
+        // any more) remains the strong teardown.
+        if (!kaptainwutax.tungsten.TungstenConfig.get().navRealCancel) {
+            return;
+        }
+        try {
+            adris.altoclef.util.helpers.TungstenHelper.stop();
+            cancelRuns++;
+        } catch (Exception ignored) {
+            // a cancel must never be the thing that breaks a tick
+        }
     }
 
     /** Times {@link #cancelAll} ran, and times it found a route still running. Read as navStop. */
@@ -468,23 +482,11 @@ public final class Nav {
 
     /** Forget the current goal. */
     public static void clearGoal() {
-        // ⛔ THIS WAS A NO-OP AND MUST STAY ONE. Same trap as Nav.pause(), which cost every
-        // pickup course before it was caught: the line here addressed the LEGACY engine, and that
-        // engine had not been pathing for months, so the call did nothing at all.
-        //
-        // G-0 replaced it with TungstenHelper.stop(), which turns 35 call sites of Nav.cancel()
-        // into 35 places that kill the live pathfinder. The worst of them is inside
-        // driveTungstenPrimary itself:
-        //
-        //     if (!busy && pf != null) { pf.find(...); }   // kick the async search
-        //     Nav.cancel();                                // and immediately stop it
-        //
-        // The search is started and killed on the same tick, every tick. That is the stall the
-        // repro reproduces: pdEnter=1921, pdWalking=0, mqStarted=0, and 135 completed breaks
-        // without a single step.
-        //
-        // Cancelling tungsten deliberately is what TungstenHelper.stop() is FOR, and the places
-        // that mean it call it directly.
+        // ⛔ WAS A NO-OP until 2026-10-04 (audit angle 3). "Forget the goal" means: abandon
+        // the attempt serving it — which is exactly cancel()'s now-real semantics, since
+        // TungstenHelper.stop() also clears hasGoal()'s active flag and the 30 s lock.
+        // Same kill switch as cancel(); see its history block for the G-0 story.
+        cancel();
     }
 
 
@@ -578,41 +580,42 @@ public final class Nav {
      * "forget where you were going".
      */
     public static void pause() {
-        // ⛔ THIS MUST STAY A NO-OP, AND MAKING IT DO SOMETHING BROKE SIX COURSES.
+        // ⛔ WAS A NO-OP — and making it do something BROKE SIX COURSES, so read this twice.
         //
-        // It used to call the legacy requestPause(). With that engine long since not pathing, the
-        // call did NOTHING -- the note above isSafeToCancel says the same thing about its
-        // neighbour: "baritone never paths now, so it said yes, safe, every single time".
+        // The G-0 attempt wired pause to an active key release and craft fell to 14 passes
+        // with every pickup course failing (pickup_flat, pickup_ledge, pickup_pit, mine_coal,
+        // mine_diamond). The callers were written against a no-op and their own key handling
+        // was the pause.
         //
-        // G-0 replaced it with an active key release, which turned five callers from no-ops into
-        // five things that stop the body mid-approach. craft fell to 14 passes with every pickup
-        // course failing -- pickup_flat, pickup_ledge, pickup_pit -- plus mine_coal and
-        // mine_diamond, which pick their drops up too.
-        //
-        // Tungsten has no pause primitive and does not need one: a caller that wants the body still
-        // for one action releases its own keys. Restoring the no-op restores the behaviour every
-        // one of those callers was actually written against.
+        // WIRED 2026-10-04 (audit angle 3) DIFFERENTLY, because the caller list changed:
+        // all five callers are now combat/screen actions (KillAura shielding, MobDefense
+        // fire-click / ghast aim / arrow dodge) that want the body STILL for one action.
+        // The wiring is not a key release — it is a TIME WINDOW (navPauseTicks ticks) that
+        // gates the four navigation drivers at MixinClientPlayerEntity (navigator, queue,
+        // walker, executor) while combat primitives (bow, shield, dodge) keep running, plus
+        // TungstenHelper.holdStill()'s one-shot release. A pickup approach that hits pause
+        // loses at most navPauseTicks ticks of walking, not the leg.
+        // navRealPause=false restores the historical no-op.
+        if (!kaptainwutax.tungsten.TungstenConfig.get().navRealPause) {
+            return;
+        }
+        try {
+            adris.altoclef.util.helpers.TungstenHelper.holdStill();
+            int ticks = Math.max(1, kaptainwutax.tungsten.TungstenConfig.get().navPauseTicks);
+            kaptainwutax.tungsten.TungstenModDataContainer.navPauseUntilMs =
+                    System.currentTimeMillis() + ticks * 50L;
+        } catch (Exception ignored) {
+            // a pause must never be the thing that breaks a tick
+        }
     }
 
     /** Drop everything, including any queued path. Stronger than {@link #cancel()}. */
     public static void cancelEverything() {
-        // ⛔ THIS WAS A NO-OP AND MUST STAY ONE. Same trap as Nav.pause(), which cost every
-        // pickup course before it was caught: the line here addressed the LEGACY engine, and that
-        // engine had not been pathing for months, so the call did nothing at all.
-        //
-        // G-0 replaced it with TungstenHelper.stop(), which turns 35 call sites of Nav.cancel()
-        // into 35 places that kill the live pathfinder. The worst of them is inside
-        // driveTungstenPrimary itself:
-        //
-        //     if (!busy && pf != null) { pf.find(...); }   // kick the async search
-        //     Nav.cancel();                                // and immediately stop it
-        //
-        // The search is started and killed on the same tick, every tick. That is the stall the
-        // repro reproduces: pdEnter=1921, pdWalking=0, mqStarted=0, and 135 completed breaks
-        // without a single step.
-        //
-        // Cancelling tungsten deliberately is what TungstenHelper.stop() is FOR, and the places
-        // that mean it call it directly.
+        // ⛔ WAS A NO-OP until 2026-10-04 (audit angle 3). "Drop everything" already had a
+        // real implementation one method up: cancelAll() is the full navigation teardown
+        // (navigator -> queue -> walker -> search -> executor -> build primitives), gated by
+        // navStopOnTaskEnd. The two call sites are give-up blocks that mean exactly that.
+        cancelAll();
     }
 
     // isBuilding() / stopBuilding() USED TO LIVE HERE, and G-0a removed both.
@@ -629,22 +632,10 @@ public final class Nav {
 
     /** Stop exploring. Safe to call when nothing is. */
     public static void stopExploring() {
-        // ⛔ THIS WAS A NO-OP AND MUST STAY ONE. Same trap as Nav.pause(), which cost every
-        // pickup course before it was caught: the line here addressed the LEGACY engine, and that
-        // engine had not been pathing for months, so the call did nothing at all.
-        //
-        // G-0 replaced it with TungstenHelper.stop(), which turns 35 call sites of Nav.cancel()
-        // into 35 places that kill the live pathfinder. The worst of them is inside
-        // driveTungstenPrimary itself:
-        //
-        //     if (!busy && pf != null) { pf.find(...); }   // kick the async search
-        //     Nav.cancel();                                // and immediately stop it
-        //
-        // The search is started and killed on the same tick, every tick. That is the stall the
-        // repro reproduces: pdEnter=1921, pdWalking=0, mqStarted=0, and 135 completed breaks
-        // without a single step.
-        //
-        // Cancelling tungsten deliberately is what TungstenHelper.stop() is FOR, and the places
-        // that mean it call it directly.
+        // ⛔ WAS A NO-OP until 2026-10-04 (audit angle 3). Exploration is tungsten's wander
+        // now; "stop exploring" means abandon the current wander attempt — cancel()'s
+        // semantics, same kill switch. Pairs with isExploring() below, which still has no
+        // live process to report on.
+        cancel();
     }
 }

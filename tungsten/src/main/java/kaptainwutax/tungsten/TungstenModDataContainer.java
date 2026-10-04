@@ -68,6 +68,18 @@ public class TungstenModDataContainer {
         return EXECUTOR != null && EXECUTOR.isRunning();
     }
         public static World world;
+
+    // ── Nav pause window (audit angle 3, 2026-10-04) ──────────────────────────
+    /** Wall-clock instant until which Nav.pause() stills navigation drivers. 0 = idle. */
+    public static volatile long navPauseUntilMs = 0L;
+    /** Times the mixin honoured a pause (telemetry; read over py4j). */
+    public static volatile int navPauseTicksServed = 0;
+
+    /** True while a Nav.pause() window is live. Combat primitives never gate on this. */
+    public static boolean navPauseActive() {
+        return System.currentTimeMillis() < navPauseUntilMs;
+    }
+
     /**
      * Upstream tungsten's {@code ;settings ignoreFallDamage} flag — "the user declares falls
      * acceptable". ⚠️ It does NOT mean "the fall guard is off": with the shipped default
