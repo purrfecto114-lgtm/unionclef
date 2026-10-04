@@ -40,6 +40,24 @@ public class BlockPathWalker {
     private static boolean active = false;
     private static Mode mode = Mode.DIRECT;
 
+    // ── LAZY camera + flat-hop gate (user request, 2026-10-04) ───────────────
+    // Navigation (FastNavigator legs, the altoclef drive) glides its camera LAZY and
+    // WALKS short/twisty routes; chases (FollowEntityTask live-steer, owned BFS) keep
+    // the fast nav turn and their hops. lazyLook is set by the start variants below.
+    private static boolean lazyLook = false;
+    // Monotonic nav-tick stamp for the recent-turn window (DIRECT has no waypoint route
+    // to count bends on — the route the body "experienced" is the observed bearing
+    // history instead).
+    private static int navTickCounter = 0;
+    private static final java.util.ArrayDeque<Integer> recentTurnTicks = new java.util.ArrayDeque<>();
+    private static final int TURN_WINDOW_TICKS = 80;   // ~4s of bearing history
+    private static final double TURN_EVENT_DEG = 40.0; // what counts as one experienced bend
+    private static float lastSteerBearing = Float.NaN;
+    /** Waypoint cells the route-shape scan may walk per tick (budget guard). */
+    private static final int ROUTE_SCAN_CAP = 256;
+    /** Ticks a flat-ground speed hop was suppressed by the short/twisty gate. */
+    public static volatile int hopSuppressedTicks = 0;
+
     // progress tracking for direct-sprint
     private static double lastDistToTarget = Double.MAX_VALUE;
     private static int noProgressTicks = 0;
@@ -133,6 +151,7 @@ public class BlockPathWalker {
         liveStuckAnchor = null;
         liveStuckTicks = 0;
         mode = Mode.DIRECT;
+        lazyLook = true;   // navigation: lazy camera + short/twisty hop gate
         active = true;
         Debug.logMessage("Walker: direct→target" +
                 (blockPath != null ? " (BFS fallback: " + blockPath.size() + " wp)" : ""));
@@ -154,6 +173,7 @@ public class BlockPathWalker {
             directTarget = target; // keep progress/mode, just re-aim
         }
         liveMode = true;
+        lazyLook = false;   // a chase is not a route walk: fast camera, keep the hops
     }
 
     /** Start BFS-only (no direct sprint). */
@@ -196,6 +216,9 @@ public class BlockPathWalker {
         mode = Mode.BFS;
         active = true;
         owningMovement = ownsMovement;
+        // A chase's block walk (ownsMovement=true) keeps the fast camera; a plain BFS
+        // leg is a route walk and goes lazy. Mirrors the DIRECT split.
+        lazyLook = !ownsMovement;
         Debug.logMessage("Walker: BFS " + blockPath.size() + " wp"
                 + (ownsMovement ? " (owns movement)" : ""));
     }
@@ -221,6 +244,9 @@ public class BlockPathWalker {
         owningMovement = false;
         liveStuckAnchor = null;
         liveStuckTicks = 0;
+        lazyLook = false;
+        recentTurnTicks.clear();
+        lastSteerBearing = Float.NaN;
     }
 
     /**
@@ -491,7 +517,37 @@ public class BlockPathWalker {
         // camera swings to the new bearing quickly. The slow humanized turn stalled sprint
         // on every bearing change of a moving target, halving chase speed (RW-9, dead
         // setTargetFast). Fast mode still goes through the mouse pipeline (anti-cheat safe).
-        WindMouseRotation.INSTANCE.setTargetFast(yaw, 0);
+        //
+        // LAZY (user request, 2026-10-04): a chase is exactly the case that needs the whip
+        // pan, so live-steer keeps it. A ROUTE walk (navigation) has no moving target to
+        // lose, and the whip pan on every replan was the complaint — navigation glides
+        // instead (ease-out ported from baritone-26.3's legit camera, LazyLookPolicy).
+        // Same mouse pipeline, different profile.
+        if (liveMode || !TungstenConfig.get().lazyLookEnabled) {
+            WindMouseRotation.INSTANCE.setTargetFast(yaw, 0);
+        } else {
+            WindMouseRotation.INSTANCE.setLazyParams(
+                    TungstenConfig.get().lazyMaxSpeedDegPerFrame,
+                    TungstenConfig.get().lazyMinSpeedDegPerFrame,
+                    TungstenConfig.get().lazySmoothing);
+            WindMouseRotation.INSTANCE.setTargetLazy(yaw, 0);
+        }
+        // "many bends" for a DIRECT line: the bends the body EXPERIENCED. The bearing to a
+        // fixed target while walking straight at it drifts slowly; it JUMPS on a replan or
+        // a route switch — exactly the twisty-leg signal we want. (The BFS half reads the
+        // route itself instead; see routeTurnCount.)
+        if (!liveMode) {
+            navTickCounter++;
+            if (!Float.isNaN(lastSteerBearing)
+                    && Math.abs(WindMouseRotation.wrapDelta(yaw - lastSteerBearing)) >= TURN_EVENT_DEG) {
+                recentTurnTicks.addLast(navTickCounter);
+            }
+            lastSteerBearing = yaw;
+            while (!recentTurnTicks.isEmpty()
+                    && navTickCounter - recentTurnTicks.peekFirst() > TURN_WINDOW_TICKS) {
+                recentTurnTicks.removeFirst();
+            }
+        }
 
         // FACE-BEFORE-MOVE (same fix as tickBFS): the humanized WindMouse yaw takes a few
         // frames to converge; pressing forward while it's still off makes the bot chase a
@@ -516,6 +572,25 @@ public class BlockPathWalker {
 
         boolean canJump = (yawErr < 45.0) && TungstenConfig.get().followJumpingEnabled
                 && onGround && landingSafe;
+        // SHORT/TWISTY ROUTES WALK (user request, 2026-10-04). The hop here is pure
+        // speed: flat ground, safe landing. A route the user would not hop themselves —
+        // a short leg, or one that keeps bending — should not be hopped. A STEP in the
+        // walking direction is still climbed: that jump is locomotion, not speed, and
+        // suppressing it would stall the body against the block until the no-progress
+        // detector re-routed. Chases (live-steer) are exempt: closing on a runner is
+        // exactly where the hop earns its keep.
+        boolean navHopGate = !liveMode
+                && kaptainwutax.tungsten.util.LazyLookPolicy.suppressFlatHop(
+                        TungstenConfig.get().walkerNoHopShortPath,
+                        directTarget != null ? horizontalDist(playerPos, directTarget) : Double.MAX_VALUE,
+                        TungstenConfig.get().walkerShortPathBlocks,
+                        TungstenConfig.get().walkerNoHopTwistyPath,
+                        recentTurnTicks.size(),
+                        TungstenConfig.get().walkerTwistyTurns);
+        if (canJump && navHopGate && !stepBlockAhead(player, yaw)) {
+            canJump = false;
+            hopSuppressedTicks++;
+        }
         mc.options.jumpKey.setPressed(canJump);
 
         if (DEBUG && (dbgN++ % 2 == 0)) {
@@ -743,7 +818,17 @@ public class BlockPathWalker {
         }
         float yaw = AttackTiming.yawTo(playerPos, wpPos);
         if (!placerOwnsAim) {
-            WindMouseRotation.INSTANCE.setTargetFast(yaw, 0);  // fast nav turn — keep the 45deg gate open
+            // LAZY (user request, 2026-10-04): a route walk glides; a chase's block walk
+            // (ownsMovement) keeps the whip pan — its waypoints move as the runner replans.
+            if (lazyLook && TungstenConfig.get().lazyLookEnabled) {
+                WindMouseRotation.INSTANCE.setLazyParams(
+                        TungstenConfig.get().lazyMaxSpeedDegPerFrame,
+                        TungstenConfig.get().lazyMinSpeedDegPerFrame,
+                        TungstenConfig.get().lazySmoothing);
+                WindMouseRotation.INSTANCE.setTargetLazy(yaw, 0);
+            } else {
+                WindMouseRotation.INSTANCE.setTargetFast(yaw, 0);  // fast nav turn — keep the 45deg gate open
+            }
         }
 
         // FACE-BEFORE-MOVE (on the ground only). The camera turns via WindMouse (humanized,
@@ -920,6 +1005,24 @@ public class BlockPathWalker {
                 && onGround && !droppingTo && !intoHole
                 && (needJumpUp || SafetySystem.isJumpLandingSafe(
                         playerPos, player.getVelocity(), player.getEntityWorld()));
+        // SHORT/TWISTY ROUTES WALK (user request, 2026-10-04): on a BFS leg the remaining
+        // route is known, so the gate reads it directly — how much walking is left and how
+        // many bends are still ahead. needJumpUp (climbing a step) is never suppressed:
+        // that jump is locomotion, not speed. A chase (lazyLook off) is exempt: closing on
+        // a runner is exactly where the hop earns its keep.
+        if (canJump && !needJumpUp && lazyLook) {
+            boolean hopGate = kaptainwutax.tungsten.util.LazyLookPolicy.suppressFlatHop(
+                    TungstenConfig.get().walkerNoHopShortPath,
+                    routeRemainingDistance(playerPos),
+                    TungstenConfig.get().walkerShortPathBlocks,
+                    TungstenConfig.get().walkerNoHopTwistyPath,
+                    routeTurnCount(TungstenConfig.get().walkerTwistyTurnAngle),
+                    TungstenConfig.get().walkerTwistyTurns);
+            if (hopGate) {
+                canJump = false;
+                hopSuppressedTicks++;
+            }
+        }
         mc.options.jumpKey.setPressed(canJump);
 
         if (DEBUG && (dbgN++ % 3 == 0)) {
@@ -939,6 +1042,65 @@ public class BlockPathWalker {
         double dx = a.x - b.x;
         double dz = a.z - b.z;
         return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    // ── route shape for the hop gate (user request, 2026-10-04) ──────────────
+
+    /**
+     * Walking distance still ahead on the BFS leg: player → current waypoint → each
+     * remaining one. Capped at {@link #ROUTE_SCAN_CAP} cells so a pathological route
+     * cannot burn the tick budget (a capped scan reads LONGER than the truth, which for
+     * a "short route" gate is the safe direction of error).
+     */
+    private static double routeRemainingDistance(Vec3d from) {
+        List<BlockPos> p = path;
+        if (p == null || p.isEmpty()) return Double.MAX_VALUE;
+        double d = 0.0;
+        Vec3d prev = from;
+        int end = Math.min(p.size(), waypointIdx + ROUTE_SCAN_CAP);
+        for (int i = waypointIdx; i < end; i++) {
+            Vec3d q = Vec3d.ofBottomCenter(p.get(i));
+            d += horizontalDist(prev, q);
+            prev = q;
+        }
+        return d;
+    }
+
+    /** Direction changes still ahead on the remaining route (LazyLookPolicy.countTurns).
+     *  Same cap and safe-direction note as {@link #routeRemainingDistance}. */
+    private static int routeTurnCount(double turnAngleDeg) {
+        List<BlockPos> p = path;
+        if (p == null) return 0;
+        int end = Math.min(p.size() - 1, waypointIdx + ROUTE_SCAN_CAP);
+        if (end - waypointIdx < 1) return 0;
+        double[] bearings = new double[end - waypointIdx];
+        for (int i = waypointIdx; i < end; i++) {
+            BlockPos a = p.get(i);
+            BlockPos b = p.get(i + 1);
+            bearings[i - waypointIdx] = Math.toDegrees(
+                    Math.atan2(b.getX() - a.getX(), b.getZ() - a.getZ()));
+        }
+        return kaptainwutax.tungsten.util.LazyLookPolicy.countTurns(bearings, turnAngleDeg);
+    }
+
+    /**
+     * TRUE when the next cell in the walking direction is a collision at foot level: a
+     * step the jump is NEEDED to climb, which the hop gate must never suppress. Yaw→dir
+     * follows the vanilla convention (0 = +Z, 90 = −X). Unreadable world counts as a
+     * step: the safe direction of error is to keep the jump.
+     */
+    private static boolean stepBlockAhead(ClientPlayerEntity player, float yaw) {
+        try {
+            BlockPos feet = player.getBlockPos();
+            double rad = Math.toRadians(yaw);
+            int dx = (int) Math.round(-Math.sin(rad));
+            int dz = (int) Math.round(Math.cos(rad));
+            BlockPos ahead = feet.add(dx, 0, dz);
+            var world = player.getEntityWorld();
+            return !world.getBlockState(ahead).getCollisionShape(world, ahead).isEmpty();
+        } catch (Throwable t) {
+            return true;
+        }
     }
 
     private static void releaseKeys() {

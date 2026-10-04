@@ -4952,6 +4952,44 @@ public class TungstenConfig {
      *  If false, only walks (no jumps) — safer but slower. */
     public boolean followJumpingEnabled = true;
 
+    // ── Lazy camera + short/twisty hop gate (user request, 2026-10-04) ────────
+
+    /**
+     * Navigation camera uses the LAZY ease-out turn instead of the fast nav turn.
+     * Ported from 23william90/baritone-26.3's "legit camera movement"
+     * (LookBehavior.handleLegitPlayerUpdate) via {@code LazyLookPolicy}; the glide goes
+     * through the same vanilla mouse pipeline as every other mode. Chases (live-steer,
+     * owned BFS legs) and mechanical contact (ladders) keep the fast turn regardless —
+     * this flag only reshapes the ROUTE walk.
+     */
+    public boolean lazyLookEnabled = true;
+    /** Lazy glide cap, degrees per reference frame (20 fps). A 90° turn converges in
+     *  ~0.4s under the defaults and the 45° face-before-move gate opens in ~0.15s. */
+    public double lazyMaxSpeedDegPerFrame = 16.0;
+    /** Lazy glide floor, degrees per reference frame — keeps the ease-out tail converging. */
+    public double lazyMinSpeedDegPerFrame = 1.6;
+    /** Ease-out factor on the remaining angle: step = min(maxSpeed, max(minSpeed, rest*f)). */
+    public double lazySmoothing = 0.30;
+
+    /**
+     * SHORT/TWISTY ROUTES WALK. A sprint-jump is a speed optimisation; on a short leg
+     * (or one that keeps bending) it buys almost nothing and reads as botty
+     * bunny-hopping, so the walker's FLAT-GROUND speed hop is suppressed there.
+     * Necessary jumps are never touched: climbing a step (needJumpUp / a foot-level
+     * collision in the walking direction), ladder contact, and every chase hop
+     * (live-steer / owned BFS legs) all still fire. Applies only while
+     * {@link #followJumpingEnabled} is itself on.
+     */
+    public boolean walkerNoHopShortPath = true;
+    /** "Short" means: less walking than this many blocks still ahead on the route. */
+    public double walkerShortPathBlocks = 12.0;
+    /** "Twisty" half of the gate: bends still ahead on the route. */
+    public boolean walkerNoHopTwistyPath = true;
+    /** At least this many direction changes still ahead make the route twisty. */
+    public int walkerTwistyTurns = 3;
+    /** Angle between consecutive route segments that counts as one bend (deg). */
+    public double walkerTwistyTurnAngle = 45.0;
+
     /** EXPERIMENTAL (#1.6.1): generate block-space neighbours via the tungsten-native
      *  SmartMoves (Traverse/Ascend/Descend/Parkour) instead of the blind r=8 scan.
      *  Fewer, already-valid neighbours -> the search routes stepped/gap terrain within

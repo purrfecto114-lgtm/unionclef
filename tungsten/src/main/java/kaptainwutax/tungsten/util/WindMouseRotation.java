@@ -18,6 +18,13 @@ import java.util.Random;
  * Result: rotation goes through the full vanilla mouse pipeline.
  * Server sees rotation steps identical to a physical mouse.
  *
+ * LAZY nav turn (user request, 2026-10-04): navigation also has a LAZY mode
+ * ({@code setTargetLazy}) — an ease-out glide ported from 23william90/baritone-26.3's
+ * "legit camera movement" ({@code LookBehavior.handleLegitPlayerUpdate}, GitHub), driven
+ * by {@link LazyLookPolicy}. It replaces the fast nav turn for ROUTE walking (short legs
+ * and bends don't need a whip pan), while chases and mechanical contact (ladders) keep
+ * {@code setTargetFast}. See LazyLookPolicy for the ported formula.
+ *
  * TODO: large-angle mouse lift pauses — when a big turn requires "picking up the mouse",
  *       add a brief pause + reduced precision to simulate repositioning.
  *
@@ -75,6 +82,14 @@ public class WindMouseRotation {
     // a teleport. Refreshed every setTarget call so it can't stick on.
     private boolean fastMode    = false;
 
+    // LAZY (navigation) turn: ease-out glide, ported from baritone-26.3's legit camera
+    // (see LazyLookPolicy for the formula and provenance). Deg per REFERENCE FRAME, so
+    // the same rate compensation as every other mode applies on top.
+    private boolean lazyMode    = false;
+    private double lazyMaxSpeed  = 16.0;   // cap: a big flick still converges in ~0.4s
+    private double lazyMinSpeed  = 1.6;    // floor: the tail never freezes
+    private double lazySmoothing = 0.30;   // ease-out factor on the remaining angle
+
     // Wall-clock of the last setTarget(). Active consumers (executor break, combat,
     // walker, bow, bridge, pillar) refresh the target every game tick (~50ms). If
     // nothing refreshes it for STALE_MS, the driving task is dead/stuck and the aim
@@ -109,12 +124,36 @@ public class WindMouseRotation {
         setTarget(yaw, pitch, true);
     }
 
+    /**
+     * Navigation turn: LAZY ease-out glide (route walking). Ported from
+     * baritone-26.3's legit camera via {@link LazyLookPolicy}. Explicit API, like
+     * {@link #setTargetFast}: every other entry point resets lazyMode, so a lazy
+     * target can never leak into a consumer that did not ask for it.
+     */
+    public void setTargetLazy(float yaw, float pitch) {
+        setTarget(yaw, pitch, false);
+        this.lazyMode = true;
+    }
+
     public void setTarget(float yaw, float pitch, boolean fast) {
         this.targetYaw   = yaw;
         this.targetPitch = pitch;
         this.hasTarget   = true;
         this.fastMode    = fast;
+        this.lazyMode    = false;
         this.lastRefreshMs = System.currentTimeMillis();
+    }
+
+    /** Tune the lazy glide (degrees per reference frame). Safe to call every tick. */
+    public void setLazyParams(double maxSpeedDeg, double minSpeedDeg, double smoothingDeg) {
+        this.lazyMaxSpeed  = maxSpeedDeg;
+        this.lazyMinSpeed  = minSpeedDeg;
+        this.lazySmoothing = smoothingDeg;
+    }
+
+    /** Whether the current target is being chased in lazy (ease-out) mode. */
+    public boolean isLazyMode() {
+        return lazyMode;
     }
 
     /**
@@ -169,6 +208,24 @@ public class WindMouseRotation {
         double dYaw   = wrapDelta(targetYaw - currentYaw);
         double dPitch = targetPitch - currentPitch;
         double dist   = Math.sqrt(dYaw * dYaw + dPitch * dPitch);
+
+        // LAZY nav turn — ported ease-out glide, BEFORE the shared 0.5deg settle so the
+        // lazy tail keeps its own (smaller) done threshold. No wind, no momentum: the
+        // glide is deterministic by design (a ported reference algorithm, not a wiggle).
+        if (lazyMode) {
+            if (dist < LazyLookPolicy.DONE_DEG) {
+                accumulatePixels(dYaw, dPitch);
+                resetVelocity();
+                return;
+            }
+            // rate: the same frame-time compensation every mode here obeys — a lazy glide
+            // on a starved frame must not fall behind the world any more than a fast one.
+            double step = LazyLookPolicy.stepDeg(dist, lazyMaxSpeed, lazyMinSpeed, lazySmoothing) * rate;
+            double s = Math.min(1.0, step / dist);
+            resetVelocity();
+            accumulatePixels(dYaw * s, dPitch * s);
+            return;
+        }
 
         if (dist < doneThreshold) {
             accumulatePixels(dYaw, dPitch);

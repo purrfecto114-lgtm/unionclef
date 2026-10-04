@@ -10,7 +10,7 @@ java {
 base {
     archivesName = "tungsten"
 }
-version = "BETA-1.0.1"
+version = "BETA-1.0.2"
 group = "kaptainwutax"
 
 dependencies {
