@@ -78,6 +78,15 @@ public class TungstenConfig {
      */
     public double driftPerTick = 0.05;
 
+    /**
+     * Scale the per-tick drift growth by the frame factor (clamp(frameMs/50ms, 1, 4)),
+     * the same rule WindMouseRotation uses. At ~10 fps a tick covers twice the ground
+     * the per-tick growth was tuned for, so a well-tracked path on a slow host used to
+     * be thrown away once the fixed growth ran out. Off = exact historical bound.
+     * (audit angle 1, 2026-10-04.)
+     */
+    public boolean driftFrameTimeAdaptive = true;
+
     /** If true: enable trail-following when target escapes (dist>20).
      *  If false: always pathfind directly to target position. */
     public boolean enableTrailing = false;
@@ -1328,9 +1337,13 @@ public class TungstenConfig {
      *
      * <p>PathFinder.checkForFallDamage walks the parent chain of a candidate, rejects any segment
      * steeper than 2.75 blocks, and already exempts water, slime columns and slime bounces. Its
-     * SECOND line is `if (ignoreFallDamage) return false`, and that field defaults to true -- so
-     * the whole guard is skipped on every search, and the same field gates six other checks in
-     * Node, BlockNode, RunToNode, SprintJumpMove and WalkToNode.
+     * SECOND line is {@code if (searchIgnoresFallDamage()) return false} — NOT the bare legacy
+     * field. With the shipped defaults (ignoreFallDamage=true, pathAvoidsFallDamage=true) the
+     * decision is FALSE and the guard RUNS. The old sentence "the whole guard is skipped on every
+     * search" described the pre-2026-08-23 world and has bitten one audit already; see
+     * TungstenModDataContainer.searchIgnoresFallDamage() and the FallDamagePolicy truth table.
+     * The same decision gates the checks in Node, BlockNode, RunToNode, SprintJumpMove and
+     * WalkToNode.
      *
      * <p>Measured on the playthrough: the bot goes from y=134 to y=60 and takes 25.3 damage, with
      * the damage witness attributing FOUR of four events to no living entity -- unattributedHits,
@@ -5394,228 +5407,228 @@ public class TungstenConfig {
         save();
     }
 
-	/**
-	 * Pass the smart block-space generator's moves through the SAME validity gate
-	 * ({@code shouldRemoveNode}) that the circle generator's moves go through.
-	 *
-	 * <p>Why: {@code getChildren} has two exits, and the smart one returned early --
-	 * before the filter. The smart generator allows itself a drop of up to three blocks
-	 * (MAX_DESCEND), while the shared gate refuses anything past -2. On the 1219 course
-	 * the guide's own node 0 -> 1 hop was measured at dy=-3.1 with the fall guard
-	 * counter reading 0 run / 0 refused: the guard was never consulted, so the guide
-	 * proposed a descent the physics leg then failed to execute (idx stuck at 1 of 16).
-	 *
-	 * <p>Falls back to the unfiltered set if the gate would reject every move, since no
-	 * guide at all is worse than an ambitious one.
-	 *
-	 * <p>⛔ WAS {@code public static}, unlike every other flag in this file (fixed 2026-09-04):
-	 * {@code SettingsCommand.getConfigFields()} explicitly excludes static fields
-	 * (`!Modifier.isStatic(...)`), so this one was invisible to {@code ;settings} and to
-	 * {@code TungstenConfig.load()}/{@code save()}'s reflection over the instance — the one flag
-	 * in the file nobody could flip live or persist, with no technical reason for the
-	 * difference. Currently dead under shipped defaults regardless (only read inside the
-	 * {@code smartMoves} branch, and {@code smartMoves} itself defaults `false`), so this had no
-	 * live-behavior impact — but it defeated the exact live A/B this flag's own doc describes.
-	 */
-	public boolean smartMovesShareTheGuard = true;
+        /**
+         * Pass the smart block-space generator's moves through the SAME validity gate
+         * ({@code shouldRemoveNode}) that the circle generator's moves go through.
+         *
+         * <p>Why: {@code getChildren} has two exits, and the smart one returned early --
+         * before the filter. The smart generator allows itself a drop of up to three blocks
+         * (MAX_DESCEND), while the shared gate refuses anything past -2. On the 1219 course
+         * the guide's own node 0 -> 1 hop was measured at dy=-3.1 with the fall guard
+         * counter reading 0 run / 0 refused: the guard was never consulted, so the guide
+         * proposed a descent the physics leg then failed to execute (idx stuck at 1 of 16).
+         *
+         * <p>Falls back to the unfiltered set if the gate would reject every move, since no
+         * guide at all is worse than an ambitious one.
+         *
+         * <p>⛔ WAS {@code public static}, unlike every other flag in this file (fixed 2026-09-04):
+         * {@code SettingsCommand.getConfigFields()} explicitly excludes static fields
+         * (`!Modifier.isStatic(...)`), so this one was invisible to {@code ;settings} and to
+         * {@code TungstenConfig.load()}/{@code save()}'s reflection over the instance — the one flag
+         * in the file nobody could flip live or persist, with no technical reason for the
+         * difference. Currently dead under shipped defaults regardless (only read inside the
+         * {@code smartMoves} branch, and {@code smartMoves} itself defaults `false`), so this had no
+         * live-behavior impact — but it defeated the exact live A/B this flag's own doc describes.
+         */
+        public boolean smartMovesShareTheGuard = true;
 
-	/**
-	 * Let a resume leave an in-flight search alone when it is already solving the SAME goal,
-	 * instead of killing it and starting over.
-	 *
-	 * <p>The resume path in PathExecutor stops the pathfinder, waits up to five seconds for
-	 * the thread to die, then searches again from scratch. Progress is discarded every time,
-	 * so resumes arriving faster than a search completes starve it forever. Measured on the
-	 * 1219 course: searchAborted=38 while tryEmit=0 -- the physics leg was killed 38 times
-	 * before its first attempt to hand back a route, which is why the bot never started
-	 * moving and why the stall detector kept firing. Self-sustaining.
-	 *
-	 * <p>Same shape as rerootMustExtendTheGuide, which fixed this on the block-space side
-	 * (bs 143 -> 505). Goals within 2 blocks count as the same goal.
-	 */
-	public static boolean resumeLetsTheSameSearchFinish = true;
+        /**
+         * Let a resume leave an in-flight search alone when it is already solving the SAME goal,
+         * instead of killing it and starting over.
+         *
+         * <p>The resume path in PathExecutor stops the pathfinder, waits up to five seconds for
+         * the thread to die, then searches again from scratch. Progress is discarded every time,
+         * so resumes arriving faster than a search completes starve it forever. Measured on the
+         * 1219 course: searchAborted=38 while tryEmit=0 -- the physics leg was killed 38 times
+         * before its first attempt to hand back a route, which is why the bot never started
+         * moving and why the stall detector kept firing. Self-sustaining.
+         *
+         * <p>Same shape as rerootMustExtendTheGuide, which fixed this on the block-space side
+         * (bs 143 -> 505). Goals within 2 blocks count as the same goal.
+         */
+        public static boolean resumeLetsTheSameSearchFinish = true;
 
-	/**
-	 * Forbid the altoclef stall detector from resetting a search that has never emitted a
-	 * route.
-	 *
-	 * <p>The detector resets the nav after 5 s without progress and gives up after 14 s. On
-	 * the 1219 course those two fired 21 and 7 times in 100 s -- exactly the searchAborted=28
-	 * counted inside the pathfinder, with tryEmit=0. The physics leg needs longer than the
-	 * detector's window to reach its first hand-over, so it was destroyed before it ever got
-	 * there: the bot cannot move, the detector fires BECAUSE it is not moving, and the reset
-	 * is what keeps it still. The threshold guarantees the stall it is meant to catch.
-	 *
-	 * <p>Raising the timeout would be a hardcoded guess. The invariant instead: a search that
-	 * has produced nothing is not a bad route, it is an unfinished one, and killing it cannot
-	 * help. Termination is still bounded -- the search has its own budget, after which active
-	 * clears and the detector regains control.
-	 */
-	public static boolean stallResetSparesAVirginSearch = true;
+        /**
+         * Forbid the altoclef stall detector from resetting a search that has never emitted a
+         * route.
+         *
+         * <p>The detector resets the nav after 5 s without progress and gives up after 14 s. On
+         * the 1219 course those two fired 21 and 7 times in 100 s -- exactly the searchAborted=28
+         * counted inside the pathfinder, with tryEmit=0. The physics leg needs longer than the
+         * detector's window to reach its first hand-over, so it was destroyed before it ever got
+         * there: the bot cannot move, the detector fires BECAUSE it is not moving, and the reset
+         * is what keeps it still. The threshold guarantees the stall it is meant to catch.
+         *
+         * <p>Raising the timeout would be a hardcoded guess. The invariant instead: a search that
+         * has produced nothing is not a bad route, it is an unfinished one, and killing it cannot
+         * help. Termination is still bounded -- the search has its own budget, after which active
+         * clears and the detector regains control.
+         */
+        public static boolean stallResetSparesAVirginSearch = true;
 
-	/**
-	 * When the task-driven navigator is stuck below a goal that is UP and OFFSET (a pit or shaft
-	 * the bot dug or fell into while mining, with the goal on the surface to one side), pillar out
-	 * of it instead of giving up. The pre-existing #46 pillar recovery only fired for goals nearly
-	 * straight overhead; a log up-and-across left the bot standing in the hole holding blocks it
-	 * could have climbed with (found live 2026-09-10). See CustomBaritoneGoalTask.pillarEscapeY.
-	 *
-	 * <p>ON by default — it is the correct behaviour and gated only so the effect on the
-	 * playthrough can be measured as a paired A/B (--pin-alt pillarEscapePit=true) and so it can
-	 * be flipped off if a regression ever surfaces. Off, the navigator yields exactly as before.
-	 *
-	 * <p>Instance, not static: SettingsCommand only registers non-static fields, so a static flag
-	 * (like stallResetSparesAVirginSearch above) cannot be toggled via `;settings` and the A/B
-	 * arm switch would silently no-op — which is exactly what happened on the first attempt here.
-	 */
-	public boolean pillarEscapePit = true;
+        /**
+         * When the task-driven navigator is stuck below a goal that is UP and OFFSET (a pit or shaft
+         * the bot dug or fell into while mining, with the goal on the surface to one side), pillar out
+         * of it instead of giving up. The pre-existing #46 pillar recovery only fired for goals nearly
+         * straight overhead; a log up-and-across left the bot standing in the hole holding blocks it
+         * could have climbed with (found live 2026-09-10). See CustomBaritoneGoalTask.pillarEscapeY.
+         *
+         * <p>ON by default — it is the correct behaviour and gated only so the effect on the
+         * playthrough can be measured as a paired A/B (--pin-alt pillarEscapePit=true) and so it can
+         * be flipped off if a regression ever surfaces. Off, the navigator yields exactly as before.
+         *
+         * <p>Instance, not static: SettingsCommand only registers non-static fields, so a static flag
+         * (like stallResetSparesAVirginSearch above) cannot be toggled via `;settings` and the A/B
+         * arm switch would silently no-op — which is exactly what happened on the first attempt here.
+         */
+        public boolean pillarEscapePit = true;
 
-	/**
-	 * Let the drop-pursuit budget survive a rebuild of the pickup task, and treat a re-resolved
-	 * entity for the same physical drop as the same pursuit.
-	 *
-	 * <p>dropPursuitHasBudget has been ON since 2026-08-23 and its two-minute ceiling measurably
-	 * fired then (dropBudget=1). It reads ZERO across the ten-minute run whose opening took
-	 * 299 s -- because the clock and the blacklist were per-INSTANCE fields, and the task is
-	 * rebuilt constantly: the freeze dump shows 'Pickup Dropped Items' at two levels of one
-	 * chain, the bot bouncing pickup -> wander -> pickup, TimeoutWanderTask:255x2032 with
-	 * wanderMoved=0, holding a lock on a wooden_pickaxe 2.3 blocks away and two blocks down.
-	 * Every rebuild restarted the clock, so the ceiling was never reached.
-	 *
-	 * <p>A budget that resets whenever its owner is rebuilt is not a budget. Ownership moves to
-	 * the TARGET; the give-up path already calls requestEntityUnreachable, which is global.
-	 *
-	 * <p>GATE: the six pickup courses (flat, side, ledge, pit, vs_mine, after_goto) finish well
-	 * inside two minutes and must stay green; then the playthrough on time-to-first-rung, which
-	 * is where the spread lives (22 / 22 / 66 / 299 s at n=4).
-	 */
-	public boolean dropBudgetSurvivesTaskRebuild = true;
+        /**
+         * Let the drop-pursuit budget survive a rebuild of the pickup task, and treat a re-resolved
+         * entity for the same physical drop as the same pursuit.
+         *
+         * <p>dropPursuitHasBudget has been ON since 2026-08-23 and its two-minute ceiling measurably
+         * fired then (dropBudget=1). It reads ZERO across the ten-minute run whose opening took
+         * 299 s -- because the clock and the blacklist were per-INSTANCE fields, and the task is
+         * rebuilt constantly: the freeze dump shows 'Pickup Dropped Items' at two levels of one
+         * chain, the bot bouncing pickup -> wander -> pickup, TimeoutWanderTask:255x2032 with
+         * wanderMoved=0, holding a lock on a wooden_pickaxe 2.3 blocks away and two blocks down.
+         * Every rebuild restarted the clock, so the ceiling was never reached.
+         *
+         * <p>A budget that resets whenever its owner is rebuilt is not a budget. Ownership moves to
+         * the TARGET; the give-up path already calls requestEntityUnreachable, which is global.
+         *
+         * <p>GATE: the six pickup courses (flat, side, ledge, pit, vs_mine, after_goto) finish well
+         * inside two minutes and must stay green; then the playthrough on time-to-first-rung, which
+         * is where the spread lives (22 / 22 / 66 / 299 s at n=4).
+         */
+        public boolean dropBudgetSurvivesTaskRebuild = true;
 
-	/**
-	 * Let the planner expand from the cell the bot is STANDING IN even when the world query
-	 * says that cell has no support.
-	 *
-	 * <p>FastPlanner skips a node with {@code continue} when {@code PlayerFit.supportTop}
-	 * returns NaN. For the START node that produces no successors at all, and since A* begins
-	 * with best = startNode the result is a ONE-cell path. FastNavigator refuses that as short
-	 * -- navRes=123/0/0/0/0 on a real run: 123 refusals and NOT ONE accepted route -- and the
-	 * queue receives a collapsed route (mqRefused(short=1229) against tickBfs=1229).
-	 *
-	 * <pre>
-	 *   plan=95/8448/253ms/sz39/zero57(e0=0,e1=57)
-	 *     e0=0    the budget check never fired before work -- not a budget problem
-	 *     e1=57   57 of 95 plans expanded the START node and it was childless
-	 * </pre>
-	 *
-	 * <p>The bot is physically supported where it stands, by definition, so the disagreement is
-	 * the world query's. Take the node's own level, exactly as the branchPlaced rescue beside it
-	 * already does. Applies to the START node only: elsewhere an unstandable cell really is one.
-	 *
-	 * <p>Water and ladders are unstandable ON PURPOSE and own a separate move generator, so the
-	 * rescue sits BEHIND that branch. Placing it in front sent a swimming start through ground
-	 * expansion and cost nav_water (14/14 -> 13/14) -- the gate caught it before it shipped.
-	 *
-	 * <p>GATE: nav and craft in full, then the playthrough on rungs -- this sits on the path
-	 * every approach takes. Read planStartRescued for proof it fires.
-	 *
-	 * <h2>MEASURED WRONG, AND THE PREMISE IS THE THING THAT IS WRONG (2026-08-26)</h2>
-	 *
-	 * <pre>
-	 *   nav 13/14, nav_water FAIL   (rescue ahead of the water branch -- fixed by moving it)
-	 *   nav_gaps INVALID: the bot LEFT THE ARENA, min Y -151.8 against a floor at -60
-	 * </pre>
-	 *
-	 * <p>The premise was 'the bot is physically supported where it stands, so a NaN support is
-	 * the world query being wrong'. It is not. On land a NaN support means the bot is NOT
-	 * standing -- it is airborne, mid-fall, or over a hole. Faking support at its own level
-	 * makes the planner build a GROUND route from mid-air, and the bot walks into the void.
-	 * That is what nav_gaps measured.
-	 *
-	 * <p>The measurement that motivated it still stands and is now better read:
-	 * plan=95/.../zero57(e0=0,e1=57) does not mean the planner wrongly refuses the start -- it
-	 * means SIXTY PER CENT OF PLANS ARE REQUESTED WHILE THE BOT IS UNSUPPORTED, and they fail
-	 * correctly. The fix is not to fake support but to resolve the start to the cell the bot is
-	 * about to LAND on (BlockSpacePathFinder.resolveStart already does exactly that), or to
-	 * withhold the plan until it is grounded.
-	 *
-	 * <p>CONFIRMED TWICE, INDEPENDENTLY. Moving the rescue behind the water/ladder branch did
-	 * NOT save it: nav_water failed again. So the rescue also fires on swimming starts that
-	 * isWater() does not classify as water, which is the same mistake in another guise --
-	 * a NaN support means NOT STANDING, and swimming is one of the ways to not be standing.
-	 *
-	 * <p>Also corrected: the nav_gaps 'left the arena' INVALID was NOT caused by this flag. It
-	 * reproduces with the flag OFF, and the suite itself re-measures it on fresh clients and
-	 * calls it the suite's wear. Baseline with the flag off is nav 14/14 + craft 22/22.
-	 *
-	 * <p>Stays OFF. Kept with its numbers so the next pass starts from the corrected reading.
-	 */
-	public boolean startCellTrustsThePlayer = false;
+        /**
+         * Let the planner expand from the cell the bot is STANDING IN even when the world query
+         * says that cell has no support.
+         *
+         * <p>FastPlanner skips a node with {@code continue} when {@code PlayerFit.supportTop}
+         * returns NaN. For the START node that produces no successors at all, and since A* begins
+         * with best = startNode the result is a ONE-cell path. FastNavigator refuses that as short
+         * -- navRes=123/0/0/0/0 on a real run: 123 refusals and NOT ONE accepted route -- and the
+         * queue receives a collapsed route (mqRefused(short=1229) against tickBfs=1229).
+         *
+         * <pre>
+         *   plan=95/8448/253ms/sz39/zero57(e0=0,e1=57)
+         *     e0=0    the budget check never fired before work -- not a budget problem
+         *     e1=57   57 of 95 plans expanded the START node and it was childless
+         * </pre>
+         *
+         * <p>The bot is physically supported where it stands, by definition, so the disagreement is
+         * the world query's. Take the node's own level, exactly as the branchPlaced rescue beside it
+         * already does. Applies to the START node only: elsewhere an unstandable cell really is one.
+         *
+         * <p>Water and ladders are unstandable ON PURPOSE and own a separate move generator, so the
+         * rescue sits BEHIND that branch. Placing it in front sent a swimming start through ground
+         * expansion and cost nav_water (14/14 -> 13/14) -- the gate caught it before it shipped.
+         *
+         * <p>GATE: nav and craft in full, then the playthrough on rungs -- this sits on the path
+         * every approach takes. Read planStartRescued for proof it fires.
+         *
+         * <h2>MEASURED WRONG, AND THE PREMISE IS THE THING THAT IS WRONG (2026-08-26)</h2>
+         *
+         * <pre>
+         *   nav 13/14, nav_water FAIL   (rescue ahead of the water branch -- fixed by moving it)
+         *   nav_gaps INVALID: the bot LEFT THE ARENA, min Y -151.8 against a floor at -60
+         * </pre>
+         *
+         * <p>The premise was 'the bot is physically supported where it stands, so a NaN support is
+         * the world query being wrong'. It is not. On land a NaN support means the bot is NOT
+         * standing -- it is airborne, mid-fall, or over a hole. Faking support at its own level
+         * makes the planner build a GROUND route from mid-air, and the bot walks into the void.
+         * That is what nav_gaps measured.
+         *
+         * <p>The measurement that motivated it still stands and is now better read:
+         * plan=95/.../zero57(e0=0,e1=57) does not mean the planner wrongly refuses the start -- it
+         * means SIXTY PER CENT OF PLANS ARE REQUESTED WHILE THE BOT IS UNSUPPORTED, and they fail
+         * correctly. The fix is not to fake support but to resolve the start to the cell the bot is
+         * about to LAND on (BlockSpacePathFinder.resolveStart already does exactly that), or to
+         * withhold the plan until it is grounded.
+         *
+         * <p>CONFIRMED TWICE, INDEPENDENTLY. Moving the rescue behind the water/ladder branch did
+         * NOT save it: nav_water failed again. So the rescue also fires on swimming starts that
+         * isWater() does not classify as water, which is the same mistake in another guise --
+         * a NaN support means NOT STANDING, and swimming is one of the ways to not be standing.
+         *
+         * <p>Also corrected: the nav_gaps 'left the arena' INVALID was NOT caused by this flag. It
+         * reproduces with the flag OFF, and the suite itself re-measures it on fresh clients and
+         * calls it the suite's wear. Baseline with the flag off is nav 14/14 + craft 22/22.
+         *
+         * <p>Stays OFF. Kept with its numbers so the next pass starts from the corrected reading.
+         */
+        public boolean startCellTrustsThePlayer = false;
 
-	/**
-	 * Start a fast plan from the cell that actually has a floor, rather than from a cell the
-	 * body merely occupies while airborne.
-	 *
-	 * <p>Measured: plan=95/8448/253ms/sz39/zero57(e0=0,e1=57) -- the budget never fired once,
-	 * and 57 of 95 plans expanded the START node and found it childless, because supportTop
-	 * read NaN there. A one-cell route follows (A* begins with best = startNode), FastNavigator
-	 * refuses it as short (navRes=123/0/0/0/0: 123 refusals, not one accepted route), and the
-	 * queue receives a collapsed route.
-	 *
-	 * <p>The previous attempt at this root -- startCellTrustsThePlayer, which INVENTED support
-	 * at the node's own level -- was measured and rejected twice (nav 13/14, nav_water). NaN
-	 * support does not mean the world is wrong; it means the bot is not standing, and swimming
-	 * is one of the ways to not be standing.
-	 *
-	 * <p>So this does not invent a floor. It moves the start onto a cell that HAS one -- the
-	 * footprint cells the collision box already overlaps, then straight down to the landing
-	 * cell, which is where the body is going anyway. Water and ladders are left untouched.
-	 * Same shape as BlockSpacePathFinder.snapToSupport, which has done this for the coarse
-	 * search all along.
-	 *
-	 * <p>GATE: nav and craft in full against the flag-off baseline (nav 14/14, craft 22/22),
-	 * then the playthrough. Read planStartSnapped for proof it fires and e1 for whether the
-	 * childless-start plans actually fall.
-	 */
-	public boolean planSnapsStartToSupport = true;
+        /**
+         * Start a fast plan from the cell that actually has a floor, rather than from a cell the
+         * body merely occupies while airborne.
+         *
+         * <p>Measured: plan=95/8448/253ms/sz39/zero57(e0=0,e1=57) -- the budget never fired once,
+         * and 57 of 95 plans expanded the START node and found it childless, because supportTop
+         * read NaN there. A one-cell route follows (A* begins with best = startNode), FastNavigator
+         * refuses it as short (navRes=123/0/0/0/0: 123 refusals, not one accepted route), and the
+         * queue receives a collapsed route.
+         *
+         * <p>The previous attempt at this root -- startCellTrustsThePlayer, which INVENTED support
+         * at the node's own level -- was measured and rejected twice (nav 13/14, nav_water). NaN
+         * support does not mean the world is wrong; it means the bot is not standing, and swimming
+         * is one of the ways to not be standing.
+         *
+         * <p>So this does not invent a floor. It moves the start onto a cell that HAS one -- the
+         * footprint cells the collision box already overlaps, then straight down to the landing
+         * cell, which is where the body is going anyway. Water and ladders are left untouched.
+         * Same shape as BlockSpacePathFinder.snapToSupport, which has done this for the coarse
+         * search all along.
+         *
+         * <p>GATE: nav and craft in full against the flag-off baseline (nav 14/14, craft 22/22),
+         * then the playthrough. Read planStartSnapped for proof it fires and e1 for whether the
+         * childless-start plans actually fall.
+         */
+        public boolean planSnapsStartToSupport = true;
 
-	/**
-	 * Let the WALKING route offer only moves the movement queue can actually execute --
-	 * in practice, drop the four diagonals from the goto grid search.
-	 *
-	 * <p>The producer and the consumer disagree, and the disagreement costs the whole route.
-	 * CombatPathfinder's HORIZONTAL set includes the four diagonals, while
-	 * MovementQueue.isSupportedEdge accepts traverse, pillar and climb but NOT diagonals --
-	 * queueDiagonals is off BY MEASUREMENT (within one batch they read 19/23/11, a spread of
-	 * twelve where every other configuration sat at 1-3), so switching the consumer on is
-	 * already a closed question.
-	 *
-	 * <p>traversePrefix stops at the FIRST unsupported edge, so a single leading diagonal makes
-	 * covered=1 and the queue refuses the entire route as 'short'. Measured live during a stall
-	 * -- the first time this bench captured one in progress rather than from logs afterwards:
-	 *
-	 * <pre>
-	 *   mqRefused=2338(short=2337)   against walkMode BFS ticks 2299 -- one refusal per tick
-	 *   mqSteps=23  mqStarted=14     the body barely moves
-	 *   pdWalking=0  pdNear=0        never walking, never near
-	 *   plan=229/.../sz48            while FastPlanner produced healthy 48-cell routes
-	 * </pre>
-	 *
-	 * <p>Combat keeps its diagonals: only the goto entry (findPath) asks for cardinal-only,
-	 * because only the goto route is handed to the queue.
-	 *
-	 * <p>⛔ CORRECTED 2026-09-05: this used to say "read gridDiagonalDropped for proof it fires".
-	 * That counter measured an EARLIER approach (dropping diagonals from the search itself,
-	 * {@code cardinalOnly}) that was tried and reverted the same day for being far worse (98%
-	 * stubs) — the counter was never rewired to the mechanism that replaced it and has read 0
-	 * unconditionally ever since (checked: no writer anywhere in the codebase). The flag this
-	 * doc describes now controls {@link CombatPathfinder#expandDiagonals}, whose own counters
-	 * are the live ones.
-	 *
-	 * <p>GATE: nav and craft in full against the baseline (nav 14/14, craft 22/22), then the
-	 * playthrough. Read {@code gridDiagonalExpanded}/{@code gridDiagonalUnturnable} for proof
-	 * this fires and mqRefused(short) for whether the refusals fall.
-	 */
-	public boolean gridRouteMatchesQueueMoves = true;
+        /**
+         * Let the WALKING route offer only moves the movement queue can actually execute --
+         * in practice, drop the four diagonals from the goto grid search.
+         *
+         * <p>The producer and the consumer disagree, and the disagreement costs the whole route.
+         * CombatPathfinder's HORIZONTAL set includes the four diagonals, while
+         * MovementQueue.isSupportedEdge accepts traverse, pillar and climb but NOT diagonals --
+         * queueDiagonals is off BY MEASUREMENT (within one batch they read 19/23/11, a spread of
+         * twelve where every other configuration sat at 1-3), so switching the consumer on is
+         * already a closed question.
+         *
+         * <p>traversePrefix stops at the FIRST unsupported edge, so a single leading diagonal makes
+         * covered=1 and the queue refuses the entire route as 'short'. Measured live during a stall
+         * -- the first time this bench captured one in progress rather than from logs afterwards:
+         *
+         * <pre>
+         *   mqRefused=2338(short=2337)   against walkMode BFS ticks 2299 -- one refusal per tick
+         *   mqSteps=23  mqStarted=14     the body barely moves
+         *   pdWalking=0  pdNear=0        never walking, never near
+         *   plan=229/.../sz48            while FastPlanner produced healthy 48-cell routes
+         * </pre>
+         *
+         * <p>Combat keeps its diagonals: only the goto entry (findPath) asks for cardinal-only,
+         * because only the goto route is handed to the queue.
+         *
+         * <p>⛔ CORRECTED 2026-09-05: this used to say "read gridDiagonalDropped for proof it fires".
+         * That counter measured an EARLIER approach (dropping diagonals from the search itself,
+         * {@code cardinalOnly}) that was tried and reverted the same day for being far worse (98%
+         * stubs) — the counter was never rewired to the mechanism that replaced it and has read 0
+         * unconditionally ever since (checked: no writer anywhere in the codebase). The flag this
+         * doc describes now controls {@link CombatPathfinder#expandDiagonals}, whose own counters
+         * are the live ones.
+         *
+         * <p>GATE: nav and craft in full against the baseline (nav 14/14, craft 22/22), then the
+         * playthrough. Read {@code gridDiagonalExpanded}/{@code gridDiagonalUnturnable} for proof
+         * this fires and mqRefused(short) for whether the refusals fall.
+         */
+        public boolean gridRouteMatchesQueueMoves = true;
 
     /**
      * Give the closest-object chooser a give-up clock, so one unreachable target cannot hold

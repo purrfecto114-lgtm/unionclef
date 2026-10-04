@@ -24,6 +24,8 @@ public class MixinInGameHud {
     @Inject(method = "render", at = @At("TAIL"))
     private void onRenderFrame(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         MinecraftClient mc = MinecraftClient.getInstance();
+        // Feed the shared frame clock (drift allowance frame factor — DriftPolicy).
+        kaptainwutax.tungsten.util.DriftPolicy.noteFrame(System.currentTimeMillis());
         if (mc.player != null) {
             WindMouseRotation.INSTANCE.applyRenderStep(mc.player);
 

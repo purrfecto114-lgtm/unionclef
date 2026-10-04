@@ -18,6 +18,15 @@ dependencies {
     mappings "net.fabricmc:yarn:1.21.11+build.4:v2"
     modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:0.140.0+1.21.11"
+
+    // Pure-logic unit tests (no Minecraft runtime needed).
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 processResources {

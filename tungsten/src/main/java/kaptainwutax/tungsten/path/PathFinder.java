@@ -52,373 +52,373 @@ import net.minecraft.world.WorldView;
 
 public class PathFinder {
 
-	
-	ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-	public AtomicBoolean active = new AtomicBoolean(false);
-	public AtomicBoolean stop = new AtomicBoolean(false);
-	/** Volatile: written by the search worker as it exits, read by callers in find(). */
-	public volatile Thread thread = null;
-	private final Set<Integer> closed = Collections.synchronizedSet(new HashSet<>());
-	private AtomicDoubleArray bestHeuristicSoFar;
-	private BinaryHeapOpenSet openSet = new BinaryHeapOpenSet();
-	protected static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10};
-	protected static final AtomicReferenceArray<Node> bestSoFar = new AtomicReferenceArray<Node>(COEFFICIENTS.length);
-	/**
-	 * Upstream's MIN_IMPROVEMENT (AbstractNodeCostSearch.java:75-82): the smallest heuristic gain
-	 * worth recording, there to shrug off floating-point noise of the order 1e-16.
-	 *
-	 * <p>It was <b>-500</b>. A NEGATIVE threshold does not filter improvements, it accepts
-	 * regressions: {@code bestHeuristicSoFar - heuristic > -500} is true for a child that is 400
-	 * units WORSE, so every child overwrote {@code bestSoFar[i]} and the array ended up holding
-	 * whichever child the parallelStream happened to finish last. Which partial path got handed
-	 * to the executor on a timeout was, literally, a race.
-	 *
-	 * <p>⚠ Making it positive makes the record MONOTONE, and two places in this file were only
-	 * ever correct because it was not: see {@link #setCurrentPath} (which threw away its re-seed)
-	 * and the note on the moving waypoint at {@link #updateNextClosestBlockNodeIDX}.
-	 */
-	private static final double minimumImprovement = 0.01;
-	/** Give up a search that has made no REAL progress (emit / block-path advance) for
-	 *  this long. The re-root machinery resets the primary timeout every time it
-	 *  re-plans, so a goal it can never reach (over the void, no blocks to place) would
-	 *  otherwise re-root forever — the bot "computes" endlessly without moving. A
-	 *  progressing search bumps lastProgressMs and never hits this; a stalled one gives
-	 *  up cleanly (#user-bug: air / tall-grass goal spun forever). */
-	private static final long HARD_SEARCH_CAP_MS = 20000L;
-	/** G68 (2026-09-12): a budget the CALLER sets for one search -- baritone's primaryTimeoutMS
-	 *  (500 ms) and failureTimeoutMS (2000 ms) for a segment the navigator hands over. The engine's
-	 *  own budget is the config's fifteen seconds and its no-progress cap twenty; a hand-off toward
-	 *  a cell no body can reach (a one-block slot) ran both in full, and the navigator re-planned
-	 *  from the same feet and handed the same cell over again -- the operator's "stands there
-	 *  computing for ever". 0 = the config's searchTimeoutMs. Consumed by the search thread and
-	 *  cleared when it ends, so a plain @goto search is not shortened by a hand-off's leftovers. */
-	public volatile long requestBudgetMs = 0;
-	/** G68: searches ended by their caller's budget, and how many of those still salvaged a partial. */
-	public static volatile int physicsBudgetOut, physicsBudgetOutSalvaged;
-	private static Optional<List<BlockNode>> blockPath = Optional.empty();
-	/** The robust elevation-aware block path from the last/current async search
-	 *  (BlockSpacePathFinder). Available while a search runs; the drift-immune
-	 *  BlockPathWalker follows this on natural terrain instead of the drift-prone
-	 *  physics executor. */
-	public static Optional<List<BlockNode>> getComputedBlockPath() { return blockPath; }
-	protected static final double MIN_DIST_PATH = 1.8;
-	protected static AtomicInteger NEXT_CLOSEST_BLOCKNODE_IDX = new AtomicInteger(1);
-	protected static AtomicInteger numNodesConsidered = new AtomicInteger(0);
-	
-	// searchTimeoutMs is now in TungstenConfig (tungsten.json)
-	// ⛔ REMOVED 2026-09-05 (TODOS.md C7.5's own follow-up, "what stands in the way of a simple
-	// fix"): `minPathSizeForTimeout` used to live here -- a genuinely dead field across the WHOLE
-	// mod. Confirmed by grep: one declaration (here) and seven write sites (GotoCommand.java,
-	// RunAwayTask.java, FollowEntityTask.java x4, TungstenHelper.java's applyFallbackTuning), ZERO
-	// reads anywhere -- every single occurrence in the codebase was the left side of an
-	// assignment. Its own doc comment described real intent ("minimum path length required before
-	// a timeout partial-path can be emitted") that was never actually wired into the timeout logic
-	// this class's own bestSoFar()/search() methods use. A write to a field nothing reads can
-	// never affect behavior, so removing it (and all seven write sites) is a no-op for anything
-	// that currently runs.
+        
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        public AtomicBoolean active = new AtomicBoolean(false);
+        public AtomicBoolean stop = new AtomicBoolean(false);
+        /** Volatile: written by the search worker as it exits, read by callers in find(). */
+        public volatile Thread thread = null;
+        private final Set<Integer> closed = Collections.synchronizedSet(new HashSet<>());
+        private AtomicDoubleArray bestHeuristicSoFar;
+        private BinaryHeapOpenSet openSet = new BinaryHeapOpenSet();
+        protected static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10};
+        protected static final AtomicReferenceArray<Node> bestSoFar = new AtomicReferenceArray<Node>(COEFFICIENTS.length);
+        /**
+         * Upstream's MIN_IMPROVEMENT (AbstractNodeCostSearch.java:75-82): the smallest heuristic gain
+         * worth recording, there to shrug off floating-point noise of the order 1e-16.
+         *
+         * <p>It was <b>-500</b>. A NEGATIVE threshold does not filter improvements, it accepts
+         * regressions: {@code bestHeuristicSoFar - heuristic > -500} is true for a child that is 400
+         * units WORSE, so every child overwrote {@code bestSoFar[i]} and the array ended up holding
+         * whichever child the parallelStream happened to finish last. Which partial path got handed
+         * to the executor on a timeout was, literally, a race.
+         *
+         * <p>⚠ Making it positive makes the record MONOTONE, and two places in this file were only
+         * ever correct because it was not: see {@link #setCurrentPath} (which threw away its re-seed)
+         * and the note on the moving waypoint at {@link #updateNextClosestBlockNodeIDX}.
+         */
+        private static final double minimumImprovement = 0.01;
+        /** Give up a search that has made no REAL progress (emit / block-path advance) for
+         *  this long. The re-root machinery resets the primary timeout every time it
+         *  re-plans, so a goal it can never reach (over the void, no blocks to place) would
+         *  otherwise re-root forever — the bot "computes" endlessly without moving. A
+         *  progressing search bumps lastProgressMs and never hits this; a stalled one gives
+         *  up cleanly (#user-bug: air / tall-grass goal spun forever). */
+        private static final long HARD_SEARCH_CAP_MS = 20000L;
+        /** G68 (2026-09-12): a budget the CALLER sets for one search -- baritone's primaryTimeoutMS
+         *  (500 ms) and failureTimeoutMS (2000 ms) for a segment the navigator hands over. The engine's
+         *  own budget is the config's fifteen seconds and its no-progress cap twenty; a hand-off toward
+         *  a cell no body can reach (a one-block slot) ran both in full, and the navigator re-planned
+         *  from the same feet and handed the same cell over again -- the operator's "stands there
+         *  computing for ever". 0 = the config's searchTimeoutMs. Consumed by the search thread and
+         *  cleared when it ends, so a plain @goto search is not shortened by a hand-off's leftovers. */
+        public volatile long requestBudgetMs = 0;
+        /** G68: searches ended by their caller's budget, and how many of those still salvaged a partial. */
+        public static volatile int physicsBudgetOut, physicsBudgetOutSalvaged;
+        private static Optional<List<BlockNode>> blockPath = Optional.empty();
+        /** The robust elevation-aware block path from the last/current async search
+         *  (BlockSpacePathFinder). Available while a search runs; the drift-immune
+         *  BlockPathWalker follows this on natural terrain instead of the drift-prone
+         *  physics executor. */
+        public static Optional<List<BlockNode>> getComputedBlockPath() { return blockPath; }
+        protected static final double MIN_DIST_PATH = 1.8;
+        protected static AtomicInteger NEXT_CLOSEST_BLOCKNODE_IDX = new AtomicInteger(1);
+        protected static AtomicInteger numNodesConsidered = new AtomicInteger(0);
+        
+        // searchTimeoutMs is now in TungstenConfig (tungsten.json)
+        // ⛔ REMOVED 2026-09-05 (TODOS.md C7.5's own follow-up, "what stands in the way of a simple
+        // fix"): `minPathSizeForTimeout` used to live here -- a genuinely dead field across the WHOLE
+        // mod. Confirmed by grep: one declaration (here) and seven write sites (GotoCommand.java,
+        // RunAwayTask.java, FollowEntityTask.java x4, TungstenHelper.java's applyFallbackTuning), ZERO
+        // reads anywhere -- every single occurrence in the codebase was the left side of an
+        // assignment. Its own doc comment described real intent ("minimum path length required before
+        // a timeout partial-path can be emitted") that was never actually wired into the timeout logic
+        // this class's own bestSoFar()/search() methods use. A write to a field nothing reads can
+        // never affect behavior, so removing it (and all seven write sites) is a no-op for anything
+        // that currently runs.
 
-	/** Minimum path progress distance before bestSoFar can be accepted.
-	 *  Default: MIN_DIST_PATH (1.8). Set near 0 for snap/dash mode (accept any path immediately). */
-	public double minDistPath = MIN_DIST_PATH;
+        /** Minimum path progress distance before bestSoFar can be accepted.
+         *  Default: MIN_DIST_PATH (1.8). Set near 0 for snap/dash mode (accept any path immediately). */
+        public double minDistPath = MIN_DIST_PATH;
 
-	/** If set, physics A* starts from this position instead of player's current position.
-	 *  Used by BlockPathWalker: BFS covers immediate blocks, A* starts from BFS endpoint.
-	 *  Consumed (set to null) after use. */
-	public Vec3d overrideStartPos = null;
+        /** If set, physics A* starts from this position instead of player's current position.
+         *  Used by BlockPathWalker: BFS covers immediate blocks, A* starts from BFS endpoint.
+         *  Consumed (set to null) after use. */
+        public Vec3d overrideStartPos = null;
 
-	/** Searches thrown away because their root went stale while they ran. A COUNTER rather than a
-	 *  log line: the message it replaces sits behind verboseDebugLogging, which is exactly why the
-	 *  fix that re-seeds the next search at the player could only be called "suggestive" — the
-	 *  before and after were greps of a channel neither run controlled. */
-	public static volatile int staleRootRejections;
-	/** Searches that exhausted with the fall guard on and were retried with it relaxed. */
-	public static volatile int fallGuardRetries;
-	/** Give-ups that retried with the guard relaxed instead of salvaging a scrap. */
-	public static volatile int gaveUpFallRetry;
+        /** Searches thrown away because their root went stale while they ran. A COUNTER rather than a
+         *  log line: the message it replaces sits behind verboseDebugLogging, which is exactly why the
+         *  fix that re-seeds the next search at the player could only be called "suggestive" — the
+         *  before and after were greps of a channel neither run controlled. */
+        public static volatile int staleRootRejections;
+        /** Searches that exhausted with the fall guard on and were retried with it relaxed. */
+        public static volatile int fallGuardRetries;
+        /** Give-ups that retried with the guard relaxed instead of salvaging a scrap. */
+        public static volatile int gaveUpFallRetry;
 
-	/** Times the PHYSICS search exhausted its open set. Read as srch=physOut/blockOut.
-	 *  Which of the two searches is even trying on a course is not obvious from the outside:
-	 *  nav_water's failing runs print 828 bare "Ran out of nodes!" (this file) and NOT ONE of
-	 *  BlockSpacePathFinder's long form, which is how the water work turned out to be aimed at
-	 *  the wrong engine. Count them apart. */
-	/** Searches that hit the hard give-up cap, and how many still handed back a partial route. Read as gaveUp/salvaged. */
-	/** Empty paths refused rather than handed over as an arrival. */
-	/** Searches killed by the shared guide being cleared under them, and those salvaged. */
-	/** Physics searches aborted by the stop flag. The last untraced exit. */
-	/** Path hand-overs: how many, how many nodes in total, and by which door. */
-	/** Best-partial deliveries that bypass executePath, and their node counts. */
-	/** Deliveries from the reset-search branch -- the third door. */
-	/** Reset prefixes refused because they contained no movement. */
-	/** Re-roots that did not extend the guide, and so were not repeated. */
-	/** Children generated and offered to the frontier. Distinguishes 'no moves' from 'no progress'. */
-	/** Raw moves generated, and how many survived the validity filter. */
-	public static volatile int rawChildren, validAfterFilter;
+        /** Times the PHYSICS search exhausted its open set. Read as srch=physOut/blockOut.
+         *  Which of the two searches is even trying on a course is not obvious from the outside:
+         *  nav_water's failing runs print 828 bare "Ran out of nodes!" (this file) and NOT ONE of
+         *  BlockSpacePathFinder's long form, which is how the water work turned out to be aimed at
+         *  the wrong engine. Count them apart. */
+        /** Searches that hit the hard give-up cap, and how many still handed back a partial route. Read as gaveUp/salvaged. */
+        /** Empty paths refused rather than handed over as an arrival. */
+        /** Searches killed by the shared guide being cleared under them, and those salvaged. */
+        /** Physics searches aborted by the stop flag. The last untraced exit. */
+        /** Path hand-overs: how many, how many nodes in total, and by which door. */
+        /** Best-partial deliveries that bypass executePath, and their node counts. */
+        /** Deliveries from the reset-search branch -- the third door. */
+        /** Reset prefixes refused because they contained no movement. */
+        /** Re-roots that did not extend the guide, and so were not repeated. */
+        /** Children generated and offered to the frontier. Distinguishes 'no moves' from 'no progress'. */
+        /** Raw moves generated, and how many survived the validity filter. */
+        public static volatile int rawChildren, validAfterFilter;
 
-	public static volatile int expandedChildren;
+        public static volatile int expandedChildren;
 
-	public static volatile int resetNoGain;
-	private boolean rerootExhausted = false;
+        public static volatile int resetNoGain;
+        private boolean rerootExhausted = false;
 
-	public static volatile int resetEmitRefused;
+        public static volatile int resetEmitRefused;
 
-	public static volatile int resetEmit, resetEmitNodes;
+        public static volatile int resetEmit, resetEmitNodes;
 
-	public static volatile int salvageEmit, salvageEmitNodes;
+        public static volatile int salvageEmit, salvageEmitNodes;
 
-	/** Emit gate: how often it is asked, and how often the agent is stationary there. */
-	/** Goal tests run, and the nearest the frontier ever came, in centimetres. */
-	public static volatile int goalTests, nearestApproachCm;
-	/** The coarse guide: node count, endpoint, and its distance to the real goal. */
-	public static volatile String guideInfo = "-";
-	/** Furthest guide node index the physics search ever reached. */
-	public static volatile int guideIdxReached;
-	/** Guides discarded because the relaxation that built them ended. */
-	public static volatile int relaxedGuideDropped;
-	/** The first agent/target pair a goal test saw, verbatim. */
-	public static volatile String lastGoalPair = "-";
+        /** Emit gate: how often it is asked, and how often the agent is stationary there. */
+        /** Goal tests run, and the nearest the frontier ever came, in centimetres. */
+        public static volatile int goalTests, nearestApproachCm;
+        /** The coarse guide: node count, endpoint, and its distance to the real goal. */
+        public static volatile String guideInfo = "-";
+        /** Furthest guide node index the physics search ever reached. */
+        public static volatile int guideIdxReached;
+        /** Guides discarded because the relaxation that built them ended. */
+        public static volatile int relaxedGuideDropped;
+        /** The first agent/target pair a goal test saw, verbatim. */
+        public static volatile String lastGoalPair = "-";
 
-	/**
-	 * DOES THE GUIDE LEAD WHERE THE PHYSICS CANNOT STEP?
-	 *
-	 * The coarse block search hands the physics leg a list of cells and the physics leg works
-	 * along them one at a time (NEXT_CLOSEST_BLOCKNODE_IDX). When a search ends with no route,
-	 * the pair that matters is how LONG the guide was and how far ALONG it the physics got --
-	 * and, at that index, what the next hop looks like in the world.
-	 *
-	 * guideIdxReached above is a LIFETIME maximum over every search, so it cannot be paired with
-	 * any one guide: a long guide from a healthy search leaves a high number standing next to a
-	 * later stall's short one. This is the per-search version, and it is what the halt record and
-	 * the hop histogram are built from.
-	 */
-	public static volatile int guideIdxThisSearch;
-	/** Nearest this SEARCH's frontier came to its target, in centimetres, and how many goal
-	 *  tests it ran. The lifetime nearestApproachCm above is a minimum over the whole run, so it
-	 *  cannot say whether a particular halt stopped far away or was refused at the door: the emit
-	 *  gate accepts 0.45 blocks, and "never got close" and "got to 0.6 and was refused" want
-	 *  opposite fixes. */
-	private static volatile int guideNearestCm;
-	private static volatile int guideGoalTests;
-	/** Agent position at the moment a search was furthest along its own guide. */
-	private static volatile Vec3d guideFurthestAt;
-	/** Searches that ended with no route while still holding a guide. */
-	public static volatile int gvpSamples;
-	/** Of those: never left the opening hop / did walk the guide to its last node. */
-	/** Halts whose guide was one hop or less. NEXT_CLOSEST_BLOCKNODE_IDX starts at 1, so on a
-	 *  two-node guide "stuck at the start" and "reached the end" are the SAME index and neither
-	 *  word means anything -- these are counted apart so the other two stay readable. */
-	public static volatile int gvpTinyGuide;
-	/** Halts on a guide of three nodes or more: never left the opening hop / walked it to the end. */
-	public static volatile int gvpStuckAtStart, gvpReachedGuideEnd;
-	/** Halts that had NO guide left to compare against. A zero sample count means nothing until
-	 *  this one is read next to it: "the physics never halts" and "it halts holding nothing" look
-	 *  identical from gvpSamples alone. */
-	public static volatile int gvpNoGuide;
-	/**
-	 * WHICH SEARCH BUILT THE GUIDE, AND WHETHER THE GUIDE WENT ANYWHERE.
-	 *
-	 * <p>Read as {@code guideSrc=<fast>/<fastNowhere>/<coarse>/<coarseNowhere>}. Two sweeps of the
-	 * playthrough (12 runs) say the physics leg is handed a route from a cell to ITSELF in 58 of 59
-	 * distinct halts -- two nodes, one block, and the hop it never crossed is [0,0,0]. gvpTinyGuide
-	 * already reported it (68 of 70 halts in one run) and nobody read it. But the coarse search's
-	 * own stub counter reads bsStub=0 in every one of those runs, so whatever produces these
-	 * guides is NOT the exit BlockSpacePathFinder.salvage() instruments -- and there are exactly
-	 * two producers. This says which, and it is the whole of the next fix.
-	 *
-	 * <p>Counted in BLOCKS, never in nodes: stringPull() collapses a healthy thirty-block straight
-	 * walk to two nodes, so a node count cannot tell a stub from a corridor. That mistake has
-	 * already been made once here and is written up at salvage().
-	 *
-	 * <p>⛔ AND A SHORT GUIDE IS ONLY A STUB IF THE GOAL IS FURTHER THAN IT. The first version of
-	 * this counter asked only whether the guide spanned MIN_DIST_PATH, and that is the same
-	 * mistake one level up: a half-block guide to a half-block goal is a CORRECT plan, and the
-	 * stall profile is full of them. Measured before the fix, run3 read 32 of 39 coarse guides
-	 * "nowhere" with truncCut=1/0 and bestSoFar's own gate at five blocks -- neither could have
-	 * produced them, so they were short plans to near goals being miscounted as defects. Both
-	 * halves are needed: the guide goes nowhere AND there was somewhere to go.
-	 */
-	public static volatile int guideFromFast, guideFromFastNowhere;
-	public static volatile int guideFromCoarse, guideFromCoarseNowhere;
-	/**
-	 * THE SHARED STEP BOTH PRODUCERS PASS THROUGH, AND WHAT IT LEAVES BEHIND.
-	 *
-	 * <p>Read as {@code trunc=<cuts>/<cutsToOneNode>}. guideSrc says the nowhere-guides come from
-	 * BOTH searches at once -- coarse 91-99% and fast up to 87% in the stall profile -- and a
-	 * defect in two independent searches at the same time is not two defects, it is one step they
-	 * share. {@link #truncateAtBreaks} is that step: it cuts the route at the first cell needing a
-	 * break or a place and keeps {@code subList(0, max(i, 1))}, so a route whose FIRST hop needs
-	 * mining or bridging -- the normal case for a bot that mines its way forward -- comes back as
-	 * the start cell alone. Counted by INDEX rather than by geometry on purpose: a cut at i &lt;= 1
-	 * leaves exactly one node, which needs no world lookup to call a route to nowhere.
-	 */
-	public static volatile int truncCut, truncCutToOneNode;
-	/**
-	 * Did the cut that just happened leave a single node? Read by noteGuideSource to attribute a
-	 * nowhere-guide to the truncation rather than to the search that built it.
-	 *
-	 * <p>ThreadLocal, not a static int: truncateAtBreaks(...) is evaluated as the ARGUMENT to
-	 * noteGuideSource(...), so the two run back to back on one thread, while searches themselves
-	 * run on several. A plain static would attribute one thread's cut to another's guide.
-	 */
-	private static final ThreadLocal<Boolean> CUT_TO_ONE = ThreadLocal.withInitial(() -> Boolean.FALSE);
-	/** Nowhere-guides from the fast planner, split by whether the truncation is what flattened them. */
-	public static volatile int fastNowhereTruncated, fastNowhereOther;
-	/**
-	 * Times the mining shortcut was reached with EVERY planned block already air.
-	 *
-	 * <p>The stall written up at that site: the shortcut trades the physics leg for a break, so
-	 * when there is nothing left to break it skips the leg for no work at all, and nothing walks
-	 * the body through the hole it just made -- mine, clear, return, retry, same truncated path,
-	 * mine again. wallShortcutNeedsAWall guards it; this counts how often the guard MATTERS,
-	 * whether or not it is on.
-	 */
-	public static volatile int wallAlreadyAir;
-	/** Coarse guides that went nowhere, tallied by the exit the coarse search left by. Read as
-	 *  coarseNowhereBy[complete xN exhaustedPartial xN ...]. Bounded like the other name tallies:
-	 *  an unbounded map is a leak, and there are only a handful of exits. */
-	private static final java.util.Map<String, Integer> COARSE_NOWHERE_BY_EXIT =
-			java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+        /**
+         * DOES THE GUIDE LEAD WHERE THE PHYSICS CANNOT STEP?
+         *
+         * The coarse block search hands the physics leg a list of cells and the physics leg works
+         * along them one at a time (NEXT_CLOSEST_BLOCKNODE_IDX). When a search ends with no route,
+         * the pair that matters is how LONG the guide was and how far ALONG it the physics got --
+         * and, at that index, what the next hop looks like in the world.
+         *
+         * guideIdxReached above is a LIFETIME maximum over every search, so it cannot be paired with
+         * any one guide: a long guide from a healthy search leaves a high number standing next to a
+         * later stall's short one. This is the per-search version, and it is what the halt record and
+         * the hop histogram are built from.
+         */
+        public static volatile int guideIdxThisSearch;
+        /** Nearest this SEARCH's frontier came to its target, in centimetres, and how many goal
+         *  tests it ran. The lifetime nearestApproachCm above is a minimum over the whole run, so it
+         *  cannot say whether a particular halt stopped far away or was refused at the door: the emit
+         *  gate accepts 0.45 blocks, and "never got close" and "got to 0.6 and was refused" want
+         *  opposite fixes. */
+        private static volatile int guideNearestCm;
+        private static volatile int guideGoalTests;
+        /** Agent position at the moment a search was furthest along its own guide. */
+        private static volatile Vec3d guideFurthestAt;
+        /** Searches that ended with no route while still holding a guide. */
+        public static volatile int gvpSamples;
+        /** Of those: never left the opening hop / did walk the guide to its last node. */
+        /** Halts whose guide was one hop or less. NEXT_CLOSEST_BLOCKNODE_IDX starts at 1, so on a
+         *  two-node guide "stuck at the start" and "reached the end" are the SAME index and neither
+         *  word means anything -- these are counted apart so the other two stay readable. */
+        public static volatile int gvpTinyGuide;
+        /** Halts on a guide of three nodes or more: never left the opening hop / walked it to the end. */
+        public static volatile int gvpStuckAtStart, gvpReachedGuideEnd;
+        /** Halts that had NO guide left to compare against. A zero sample count means nothing until
+         *  this one is read next to it: "the physics never halts" and "it halts holding nothing" look
+         *  identical from gvpSamples alone. */
+        public static volatile int gvpNoGuide;
+        /**
+         * WHICH SEARCH BUILT THE GUIDE, AND WHETHER THE GUIDE WENT ANYWHERE.
+         *
+         * <p>Read as {@code guideSrc=<fast>/<fastNowhere>/<coarse>/<coarseNowhere>}. Two sweeps of the
+         * playthrough (12 runs) say the physics leg is handed a route from a cell to ITSELF in 58 of 59
+         * distinct halts -- two nodes, one block, and the hop it never crossed is [0,0,0]. gvpTinyGuide
+         * already reported it (68 of 70 halts in one run) and nobody read it. But the coarse search's
+         * own stub counter reads bsStub=0 in every one of those runs, so whatever produces these
+         * guides is NOT the exit BlockSpacePathFinder.salvage() instruments -- and there are exactly
+         * two producers. This says which, and it is the whole of the next fix.
+         *
+         * <p>Counted in BLOCKS, never in nodes: stringPull() collapses a healthy thirty-block straight
+         * walk to two nodes, so a node count cannot tell a stub from a corridor. That mistake has
+         * already been made once here and is written up at salvage().
+         *
+         * <p>⛔ AND A SHORT GUIDE IS ONLY A STUB IF THE GOAL IS FURTHER THAN IT. The first version of
+         * this counter asked only whether the guide spanned MIN_DIST_PATH, and that is the same
+         * mistake one level up: a half-block guide to a half-block goal is a CORRECT plan, and the
+         * stall profile is full of them. Measured before the fix, run3 read 32 of 39 coarse guides
+         * "nowhere" with truncCut=1/0 and bestSoFar's own gate at five blocks -- neither could have
+         * produced them, so they were short plans to near goals being miscounted as defects. Both
+         * halves are needed: the guide goes nowhere AND there was somewhere to go.
+         */
+        public static volatile int guideFromFast, guideFromFastNowhere;
+        public static volatile int guideFromCoarse, guideFromCoarseNowhere;
+        /**
+         * THE SHARED STEP BOTH PRODUCERS PASS THROUGH, AND WHAT IT LEAVES BEHIND.
+         *
+         * <p>Read as {@code trunc=<cuts>/<cutsToOneNode>}. guideSrc says the nowhere-guides come from
+         * BOTH searches at once -- coarse 91-99% and fast up to 87% in the stall profile -- and a
+         * defect in two independent searches at the same time is not two defects, it is one step they
+         * share. {@link #truncateAtBreaks} is that step: it cuts the route at the first cell needing a
+         * break or a place and keeps {@code subList(0, max(i, 1))}, so a route whose FIRST hop needs
+         * mining or bridging -- the normal case for a bot that mines its way forward -- comes back as
+         * the start cell alone. Counted by INDEX rather than by geometry on purpose: a cut at i &lt;= 1
+         * leaves exactly one node, which needs no world lookup to call a route to nowhere.
+         */
+        public static volatile int truncCut, truncCutToOneNode;
+        /**
+         * Did the cut that just happened leave a single node? Read by noteGuideSource to attribute a
+         * nowhere-guide to the truncation rather than to the search that built it.
+         *
+         * <p>ThreadLocal, not a static int: truncateAtBreaks(...) is evaluated as the ARGUMENT to
+         * noteGuideSource(...), so the two run back to back on one thread, while searches themselves
+         * run on several. A plain static would attribute one thread's cut to another's guide.
+         */
+        private static final ThreadLocal<Boolean> CUT_TO_ONE = ThreadLocal.withInitial(() -> Boolean.FALSE);
+        /** Nowhere-guides from the fast planner, split by whether the truncation is what flattened them. */
+        public static volatile int fastNowhereTruncated, fastNowhereOther;
+        /**
+         * Times the mining shortcut was reached with EVERY planned block already air.
+         *
+         * <p>The stall written up at that site: the shortcut trades the physics leg for a break, so
+         * when there is nothing left to break it skips the leg for no work at all, and nothing walks
+         * the body through the hole it just made -- mine, clear, return, retry, same truncated path,
+         * mine again. wallShortcutNeedsAWall guards it; this counts how often the guard MATTERS,
+         * whether or not it is on.
+         */
+        public static volatile int wallAlreadyAir;
+        /** Coarse guides that went nowhere, tallied by the exit the coarse search left by. Read as
+         *  coarseNowhereBy[complete xN exhaustedPartial xN ...]. Bounded like the other name tallies:
+         *  an unbounded map is a leak, and there are only a handful of exits. */
+        private static final java.util.Map<String, Integer> COARSE_NOWHERE_BY_EXIT =
+                        java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
 
-	/** The tally, most frequent first, as "exit xN exit xN". */
-	public static String coarseNowhereDump() {
-		synchronized (COARSE_NOWHERE_BY_EXIT) {
-			return COARSE_NOWHERE_BY_EXIT.entrySet().stream()
-					.sorted((a, b) -> b.getValue() - a.getValue())
-					.map(e -> e.getKey() + "x" + e.getValue())
-					.reduce((a, b) -> a + " " + b).orElse("-");
-		}
-	}
+        /** The tally, most frequent first, as "exit xN exit xN". */
+        public static String coarseNowhereDump() {
+                synchronized (COARSE_NOWHERE_BY_EXIT) {
+                        return COARSE_NOWHERE_BY_EXIT.entrySet().stream()
+                                        .sorted((a, b) -> b.getValue() - a.getValue())
+                                        .map(e -> e.getKey() + "x" + e.getValue())
+                                        .reduce((a, b) -> a + " " + b).orElse("-");
+                }
+        }
 
-	/** Zeroed with the run counters. */
-	public static void clearCoarseNowhere() { COARSE_NOWHERE_BY_EXIT.clear(); }
+        /** Zeroed with the run counters. */
+        public static void clearCoarseNowhere() { COARSE_NOWHERE_BY_EXIT.clear(); }
 
-	/** The shape (dx,dy,dz) of the hop the physics never crossed, tallied over samples. */
-	public static final java.util.Map<String, Integer> gvpHopShapes =
-			java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
-	/** The last few halts in full, for reading rather than counting. */
-	private static final java.util.ArrayDeque<String> gvpDumps = new java.util.ArrayDeque<>();
+        /** The shape (dx,dy,dz) of the hop the physics never crossed, tallied over samples. */
+        public static final java.util.Map<String, Integer> gvpHopShapes =
+                        java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+        /** The last few halts in full, for reading rather than counting. */
+        private static final java.util.ArrayDeque<String> gvpDumps = new java.util.ArrayDeque<>();
 
-	/** The halt records, newest last, one per line. */
-	public static String gvpDumpText() {
-		synchronized (gvpDumps) {
-			if (gvpDumps.isEmpty()) return "-";
-			return String.join(System.lineSeparator(), gvpDumps);
-		}
-	}
+        /** The halt records, newest last, one per line. */
+        public static String gvpDumpText() {
+                synchronized (gvpDumps) {
+                        if (gvpDumps.isEmpty()) return "-";
+                        return String.join(System.lineSeparator(), gvpDumps);
+                }
+        }
 
-	/** Cleared with the counters: a stale halt from the previous run reads exactly like a fresh one. */
-	public static void gvpClearDumps() {
-		synchronized (gvpDumps) { gvpDumps.clear(); }
-		guideIdxThisSearch = 0;
-		guideFurthestAt = null;
-		guideNearestCm = 0;
-		guideGoalTests = 0;
-	}
+        /** Cleared with the counters: a stale halt from the previous run reads exactly like a fresh one. */
+        public static void gvpClearDumps() {
+                synchronized (gvpDumps) { gvpDumps.clear(); }
+                guideIdxThisSearch = 0;
+                guideFurthestAt = null;
+                guideNearestCm = 0;
+                guideGoalTests = 0;
+        }
 
-	/** The hop histogram, most frequent first, as "dx,dy,dz xN". */
-	public static String gvpHopDump() {
-		synchronized (gvpHopShapes) {
-			if (gvpHopShapes.isEmpty()) return "none";
-			return gvpHopShapes.entrySet().stream()
-					.sorted((a, b) -> b.getValue() - a.getValue())
-					.limit(12)
-					.map(e -> e.getKey() + "x" + e.getValue())
-					.collect(Collectors.joining(" "));
-		}
-	}
+        /** The hop histogram, most frequent first, as "dx,dy,dz xN". */
+        public static String gvpHopDump() {
+                synchronized (gvpHopShapes) {
+                        if (gvpHopShapes.isEmpty()) return "none";
+                        return gvpHopShapes.entrySet().stream()
+                                        .sorted((a, b) -> b.getValue() - a.getValue())
+                                        .limit(12)
+                                        .map(e -> e.getKey() + "x" + e.getValue())
+                                        .collect(Collectors.joining(" "));
+                }
+        }
 
-	public static volatile int tryEmitCalls, tryEmitStationary;
-	/** Emissions that happened ONLY because the moving-arrival rule is on. */
-	public static volatile int tryEmitMoving;
-	/** Goal tests a search must spend looking for a stopped arrival before a moving one counts. */
-	private static final int MOVING_FALLBACK_AFTER_TESTS = 40;
+        public static volatile int tryEmitCalls, tryEmitStationary;
+        /** Emissions that happened ONLY because the moving-arrival rule is on. */
+        public static volatile int tryEmitMoving;
+        /** Goal tests a search must spend looking for a stopped arrival before a moving one counts. */
+        private static final int MOVING_FALLBACK_AFTER_TESTS = 40;
 
-	public static volatile int emitCount, emitTotalNodes, emitFresh, emitAppended;
+        public static volatile int emitCount, emitTotalNodes, emitFresh, emitAppended;
 
-	/** Resumes that left an in-flight search on the same goal alone instead of killing it. */
-	public static volatile int resumeLetItFinish = 0;
+        /** Resumes that left an in-flight search on the same goal alone instead of killing it. */
+        public static volatile int resumeLetItFinish = 0;
 
-	/**
-	 * WHO KILLS THE SEARCH. searchAborted=40 with tryEmit=0 says the physics leg is
-	 * destroyed before its first attempt to hand back a route, and three fixes aimed at
-	 * guessed call sites never fired. So stop guessing: every stop.set(true) in the module
-	 * tags itself here, and the readout names the site instead of me nominating one.
-	 *
-	 * <p>⛔ CORRECTED 2026-09-04: a {@code noteStop("PathFinder@173")} fragment was sitting
-	 * INSIDE this comment block (between the {@code /**} and {@code *&#47;}), pasted there by
-	 * accident instead of landing as real code at some call site -- inert text, never executed.
-	 * Checked every current {@code stop.set(true)} site in the codebase (grep for
-	 * {@code noteStop(}): all of them, in every other file, correctly call {@code noteStop}
-	 * right before {@code stop.set(true)}. This stray fragment was the only gap, and it was
-	 * dead documentation, not a missing call -- removed rather than relocated.
-	 */
-	public static final java.util.Map<String, Integer> stopBy =
-			java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
-	/** G91: searches whose root was taken from a body still moving (|v_h| > 0.02). The replay
-	 *  then starts from a body that is slower or elsewhere than the root; the navigator's
-	 *  hand-off waits for rest first (physicsHandoffFromRest), other callers do not yet.
-	 *  Read pfRootMoving=. */
-	public static volatile int pfRootMoving = 0;
-	public static void noteStop(String who) { synchronized (stopBy) { stopBy.merge(who, 1, Integer::sum); } }
-	public static String stopByDump() {
-		synchronized (stopBy) {
-			if (stopBy.isEmpty()) return "none";
-			StringBuilder sb = new StringBuilder();
-			stopBy.forEach((k, v) -> sb.append(k).append(':').append(v).append(' '));
-			return sb.toString().trim();
-		}
-	}
+        /**
+         * WHO KILLS THE SEARCH. searchAborted=40 with tryEmit=0 says the physics leg is
+         * destroyed before its first attempt to hand back a route, and three fixes aimed at
+         * guessed call sites never fired. So stop guessing: every stop.set(true) in the module
+         * tags itself here, and the readout names the site instead of me nominating one.
+         *
+         * <p>⛔ CORRECTED 2026-09-04: a {@code noteStop("PathFinder@173")} fragment was sitting
+         * INSIDE this comment block (between the {@code /**} and {@code *&#47;}), pasted there by
+         * accident instead of landing as real code at some call site -- inert text, never executed.
+         * Checked every current {@code stop.set(true)} site in the codebase (grep for
+         * {@code noteStop(}): all of them, in every other file, correctly call {@code noteStop}
+         * right before {@code stop.set(true)}. This stray fragment was the only gap, and it was
+         * dead documentation, not a missing call -- removed rather than relocated.
+         */
+        public static final java.util.Map<String, Integer> stopBy =
+                        java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+        /** G91: searches whose root was taken from a body still moving (|v_h| > 0.02). The replay
+         *  then starts from a body that is slower or elsewhere than the root; the navigator's
+         *  hand-off waits for rest first (physicsHandoffFromRest), other callers do not yet.
+         *  Read pfRootMoving=. */
+        public static volatile int pfRootMoving = 0;
+        public static void noteStop(String who) { synchronized (stopBy) { stopBy.merge(who, 1, Integer::sum); } }
+        public static String stopByDump() {
+                synchronized (stopBy) {
+                        if (stopBy.isEmpty()) return "none";
+                        StringBuilder sb = new StringBuilder();
+                        stopBy.forEach((k, v) -> sb.append(k).append(':').append(v).append(' '));
+                        return sb.toString().trim();
+                }
+        }
 
-	/**
-	 * Has the CURRENT search handed back a route yet? Cleared when a search starts, set the
-	 * first time one is emitted. Read by the altoclef stall detector, which must not reset a
-	 * search that has never produced anything -- killing it cannot help, and measurably
-	 * prevents the very movement whose absence triggered the reset.
-	 */
-	/** Stall resets skipped because the search had not emitted anything yet. */
-	public static volatile int stallSpared = 0;
+        /**
+         * Has the CURRENT search handed back a route yet? Cleared when a search starts, set the
+         * first time one is emitted. Read by the altoclef stall detector, which must not reset a
+         * search that has never produced anything -- killing it cannot help, and measurably
+         * prevents the very movement whose absence triggered the reset.
+         */
+        /** Stall resets skipped because the search had not emitted anything yet. */
+        public static volatile int stallSpared = 0;
 
-	public static volatile boolean searchHasEmitted = false;
+        public static volatile boolean searchHasEmitted = false;
 
-	public static volatile int searchAborted;
+        public static volatile int searchAborted;
 
-	public static volatile int guideVanished, guideVanishedSalvaged;
+        public static volatile int guideVanished, guideVanishedSalvaged;
 
-	public static volatile int emptyPathRefused;
+        public static volatile int emptyPathRefused;
 
-	public static volatile int searchGaveUp, searchGaveUpSalvaged;
+        public static volatile int searchGaveUp, searchGaveUpSalvaged;
 
-	public static volatile int physicsRanOut;
-	/** Of those, how many were salvaged into a partial route instead of standing still. */
-	public static volatile int physicsRanOutSalvaged;
+        public static volatile int physicsRanOut;
+        /** Of those, how many were salvaged into a partial route instead of standing still. */
+        public static volatile int physicsRanOutSalvaged;
 
-	private long startTime;
-	private Node start;
+        private long startTime;
+        private Node start;
 
-	public Vec3d TARGET = new Vec3d(0.5D, 10.0D, 0.5D);
-	
-	/**
-	 * The goal this pathfinder was last asked for, whoever asked.
-	 *
-	 * <p>TungstenMod.TARGET is only written by hand-driven entry points (;goto, the keybinding,
-	 * follow-entity, py4j), so an altoclef-driven path leaves it stale -- and the post-mining
-	 * resume, which gates on it, gives up. This is the goal that is actually being worked.
-	 */
-	public static volatile Vec3d lastSearchTarget = null;
+        public Vec3d TARGET = new Vec3d(0.5D, 10.0D, 0.5D);
+        
+        /**
+         * The goal this pathfinder was last asked for, whoever asked.
+         *
+         * <p>TungstenMod.TARGET is only written by hand-driven entry points (;goto, the keybinding,
+         * follow-entity, py4j), so an altoclef-driven path leaves it stale -- and the post-mining
+         * resume, which gates on it, gives up. This is the goal that is actually being worked.
+         */
+        public static volatile Vec3d lastSearchTarget = null;
 
-	synchronized public boolean find(WorldView world, Vec3d target, PlayerEntity player) {
-		lastSearchTarget = target;
-		return find(world, target, player, Optional.empty());
-	}
+        synchronized public boolean find(WorldView world, Vec3d target, PlayerEntity player) {
+                lastSearchTarget = target;
+                return find(world, target, player, Optional.empty());
+        }
 
-	/** G68: a search with the caller's own budget (baritone's primary / failure timeouts for a
-	 *  handed-over segment). Refused like {@link #find(WorldView, Vec3d, PlayerEntity)} while a
-	 *  previous search is still tearing down; the budget is dropped with the refusal. */
-	synchronized public boolean find(WorldView world, Vec3d target, PlayerEntity player, long budgetMs) {
-		requestBudgetMs = Math.max(0L, budgetMs);
-		boolean accepted = find(world, target, player);
-		if (!accepted) requestBudgetMs = 0;
-		return accepted;
-	}
+        /** G68: a search with the caller's own budget (baritone's primary / failure timeouts for a
+         *  handed-over segment). Refused like {@link #find(WorldView, Vec3d, PlayerEntity)} while a
+         *  previous search is still tearing down; the budget is dropped with the refusal. */
+        synchronized public boolean find(WorldView world, Vec3d target, PlayerEntity player, long budgetMs) {
+                requestBudgetMs = Math.max(0L, budgetMs);
+                boolean accepted = find(world, target, player);
+                if (!accepted) requestBudgetMs = 0;
+                return accepted;
+        }
 
     /**
      * Start a search. Returns FALSE when the request was refused because a search is
@@ -432,7 +432,7 @@ public class PathFinder {
      * (final_dist stayed at the start position while every other run passed in ~8 s).
      */
     synchronized public boolean find(WorldView world, Vec3d target, PlayerEntity player, Optional<List<BlockNode>> blockPath) {
-		lastSearchTarget = target;
+                lastSearchTarget = target;
 
         if(active.get() || thread != null) return false;
         active.set(true);
@@ -496,647 +496,647 @@ public class PathFinder {
         thread.start();
         return true;
     }
-	
-	private boolean checkForFallDamage(Node n, WorldView world) {
-		if (this.stop.get()) return false;
-		if (TungstenModDataContainer.searchIgnoresFallDamage()) return false;
-		if (BlockStateChecker.isAnyWater(world.getBlockState(n.agent.getBlockPos()))) return false;
-		// Landing on slime bounces instead of hurting — any fall height is safe.
-		if (MovementHelper.isSlimeColumnBelow(world, n.agent.getBlockPos(), 32)) return false;
-		if (n.parent == null) return false;
-		if (Thread.currentThread().isInterrupted()) return false;
-		Node prev = null;
-		do {
-			if (Thread.currentThread().isInterrupted()) return false;
-			if (stop.get()) break;
-			if (prev == null) {
-				prev = n.parent;
-			} else {
-				prev = prev.parent;
-			}
-			double currFallDist = DistanceCalculator.getJumpHeight(prev.agent.getPos().y, n.agent.getPos().y);
-			if (currFallDist < -2.75 || prev.agent.isDamaged || n.agent.isDamaged) {
-				return true;
-			}
-		} while (!prev.agent.onGround && !prev.agent.touchingWater);
+        
+        private boolean checkForFallDamage(Node n, WorldView world) {
+                if (this.stop.get()) return false;
+                if (TungstenModDataContainer.searchIgnoresFallDamage()) return false;
+                if (BlockStateChecker.isAnyWater(world.getBlockState(n.agent.getBlockPos()))) return false;
+                // Landing on slime bounces instead of hurting — any fall height is safe.
+                if (MovementHelper.isSlimeColumnBelow(world, n.agent.getBlockPos(), 32)) return false;
+                if (n.parent == null) return false;
+                if (Thread.currentThread().isInterrupted()) return false;
+                Node prev = null;
+                do {
+                        if (Thread.currentThread().isInterrupted()) return false;
+                        if (stop.get()) break;
+                        if (prev == null) {
+                                prev = n.parent;
+                        } else {
+                                prev = prev.parent;
+                        }
+                        double currFallDist = DistanceCalculator.getJumpHeight(prev.agent.getPos().y, n.agent.getPos().y);
+                        if (currFallDist < -2.75 || prev.agent.isDamaged || n.agent.isDamaged) {
+                                return true;
+                        }
+                } while (!prev.agent.onGround && !prev.agent.touchingWater);
 
         return DistanceCalculator.getJumpHeight(prev.agent.getPos().y, n.agent.getPos().y) < -2.75 || prev.agent.isDamaged || n.agent.isDamaged;
-	}
+        }
 
-	private void search(WorldView world, Vec3d target, PlayerEntity player) {
-		search(world, null, target, player);
-	}
+        private void search(WorldView world, Vec3d target, PlayerEntity player) {
+                search(world, null, target, player);
+        }
 
-	private void search(WorldView world, Node start, Vec3d target, PlayerEntity player) {
-		search(world, start, target, player, 0);
-	}
+        private void search(WorldView world, Node start, Vec3d target, PlayerEntity player) {
+                search(world, start, target, player, 0);
+        }
 
-	private void search(WorldView world, Node start, Vec3d targetIn, PlayerEntity player, int failedAttempts) {
-	    boolean failing = true;
-	    // Set when the hard cap ends the search; read after the loop, where it used to fall through
-	    // both arms and hand the caller nothing.
-	    boolean gaveUpHard = false;
-	    TungstenModRenderContainer.RENDERERS.clear();
+        private void search(WorldView world, Node start, Vec3d targetIn, PlayerEntity player, int failedAttempts) {
+            boolean failing = true;
+            // Set when the hard cap ends the search; read after the loop, where it used to fall through
+            // both arms and hand the caller nothing.
+            boolean gaveUpHard = false;
+            TungstenModRenderContainer.RENDERERS.clear();
 
-	    long startTime = System.currentTimeMillis();
-	    // G68: a caller's budget (a hand-off's 500 / 2000 ms) stands in for the config's, and is a
-	    // HARD cap as well -- the no-progress cap below is twenty seconds, and a hand-off must not
-	    // wait for it. A quarter second of grace lets the primary timeout's own partial go out first.
-	    final long budgetMs = requestBudgetMs > 0 ? requestBudgetMs : TungstenConfig.get().searchTimeoutMs;
-	    final long hardCapTime = requestBudgetMs > 0 ? startTime + budgetMs + 250L : Long.MAX_VALUE;
-	    boolean budgetOut = false;
-	    long primaryTimeoutTime = startTime + budgetMs;
-	    // Time of the last REAL progress (emitted a runnable partial, or advanced along
-	    // the block path). NOT bumped by re-roots — a re-root re-plans the same
-	    // unreachable partial and would otherwise mask a stall. If no real progress for
-	    // HARD_SEARCH_CAP_MS the goal is unreachable and the search gives up (#user-bug).
-	    long lastProgressMs = startTime;
-		numNodesConsidered.set(0);
-	    int timeCheckInterval = 1 << 3;
-	    double minVelocity = BlockStateChecker.isAnyWater(world.getBlockState(new BlockPos((int) targetIn.getX(), (int) targetIn.getY(), (int) targetIn.getZ()))) ? 0.2 :  0.07;
-	
-	    if (player.getEntityPos().distanceTo(targetIn) < 1.0 && minDistPath >= MIN_DIST_PATH) {
-	        Debug.logMessage("Already at target location!");
-	        return;
-	    }
-	    if (start == null) {
-		    	if (overrideStartPos != null) {
-		    		start = initializeStartNodeFromPos(player, overrideStartPos, targetIn);
-		    		overrideStartPos = null; // consumed
-		    	} else {
-		    		start = initializeStartNode(player, targetIn);
-		    	}
-		    	this.start = start;
-	    }
-	    if (blockPath.isEmpty()) {
-		    long tBlock0 = TungstenConfig.get().debugTime ? System.nanoTime() : 0;
-		    Optional<List<BlockNode>> blockPath = findBlockPath(world, targetIn, player);
-		    if (blockPath.isPresent()) {
-	        	RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
-	        	PathFinder.blockPath = blockPath;
-	    	    NEXT_CLOSEST_BLOCKNODE_IDX.set(1);
+            long startTime = System.currentTimeMillis();
+            // G68: a caller's budget (a hand-off's 500 / 2000 ms) stands in for the config's, and is a
+            // HARD cap as well -- the no-progress cap below is twenty seconds, and a hand-off must not
+            // wait for it. A quarter second of grace lets the primary timeout's own partial go out first.
+            final long budgetMs = requestBudgetMs > 0 ? requestBudgetMs : TungstenConfig.get().searchTimeoutMs;
+            final long hardCapTime = requestBudgetMs > 0 ? startTime + budgetMs + 250L : Long.MAX_VALUE;
+            boolean budgetOut = false;
+            long primaryTimeoutTime = startTime + budgetMs;
+            // Time of the last REAL progress (emitted a runnable partial, or advanced along
+            // the block path). NOT bumped by re-roots — a re-root re-plans the same
+            // unreachable partial and would otherwise mask a stall. If no real progress for
+            // HARD_SEARCH_CAP_MS the goal is unreachable and the search gives up (#user-bug).
+            long lastProgressMs = startTime;
+                numNodesConsidered.set(0);
+            int timeCheckInterval = 1 << 3;
+            double minVelocity = BlockStateChecker.isAnyWater(world.getBlockState(new BlockPos((int) targetIn.getX(), (int) targetIn.getY(), (int) targetIn.getZ()))) ? 0.2 :  0.07;
+        
+            if (player.getEntityPos().distanceTo(targetIn) < 1.0 && minDistPath >= MIN_DIST_PATH) {
+                Debug.logMessage("Already at target location!");
+                return;
+            }
+            if (start == null) {
+                        if (overrideStartPos != null) {
+                                start = initializeStartNodeFromPos(player, overrideStartPos, targetIn);
+                                overrideStartPos = null; // consumed
+                        } else {
+                                start = initializeStartNode(player, targetIn);
+                        }
+                        this.start = start;
+            }
+            if (blockPath.isEmpty()) {
+                    long tBlock0 = TungstenConfig.get().debugTime ? System.nanoTime() : 0;
+                    Optional<List<BlockNode>> blockPath = findBlockPath(world, targetIn, player);
+                    if (blockPath.isPresent()) {
+                        RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                        PathFinder.blockPath = blockPath;
+                    NEXT_CLOSEST_BLOCKNODE_IDX.set(1);
 
-				if (TungstenConfig.get().verboseDebugLogging) Debug.logMessage("Serching for inputs!");
-	        }
-	        if (TungstenConfig.get().debugTime) {
-	            System.out.printf("Tungsten [blockSearch] %.1fms | found=%b | nodes=%d%n",
-	                (System.nanoTime() - tBlock0) / 1_000_000.0,
-	                blockPath.isPresent(),
-	                blockPath.isPresent() ? blockPath.get().size() : 0);
-	        }
-	    }
-	    if (blockPath.isEmpty() || blockPath.get().size() < 1) {
-	    	Debug.logWarning("Failed! No block path");
-	    	return;
-	    }
+                                if (TungstenConfig.get().verboseDebugLogging) Debug.logMessage("Serching for inputs!");
+                }
+                if (TungstenConfig.get().debugTime) {
+                    System.out.printf("Tungsten [blockSearch] %.1fms | found=%b | nodes=%d%n",
+                        (System.nanoTime() - tBlock0) / 1_000_000.0,
+                        blockPath.isPresent(),
+                        blockPath.isPresent() ? blockPath.get().size() : 0);
+                }
+            }
+            if (blockPath.isEmpty() || blockPath.get().size() < 1) {
+                Debug.logWarning("Failed! No block path");
+                return;
+            }
 
-	    // Already standing at the wall: the truncated guidance is a stub the
-	    // physics search starves on ("Ran out of nodes" with nothing emitted).
-	    // Skip the physics leg — hand the executor an empty path with the break
-	    // queue, mining starts immediately and the goto retry drives the rest.
-	    // ⛔ AND ONLY IF THERE IS STILL A WALL. This shortcut trades the physics leg for a
-	    // break, so with every planned block already air it skips the leg for no work at all --
-	    // and nothing walks the body through the hole it made a moment ago. That is the stall:
-	    // mine, clear the path, return, retry, find the same truncated path, mine again. The
-	    // 636 ms "Mining done" is the tell.
-	    boolean wallStillThere = false;
-	    if (pendingBreaks != null) {
-	        for (net.minecraft.util.math.BlockPos bp : pendingBreaks) {
-	            if (!world.getBlockState(bp).isAir()) { wallStillThere = true; break; }
-	        }
-	    }
-	    // ⛔ COUNT THE CASE, NOT THE FLAG. This tally used to sit behind wallShortcutNeedsAWall,
-	    // so with the guard off it read 0 and said nothing -- which reads exactly like "the wall is
-	    // always still there". That is the third counter in this file family blinded the same way
-	    // (bsStub was unreachable behind salvage()'s early return, and read 0 through two passes of
-	    // hunting). A control arm must report how much material the guard WOULD have had, so the
-	    // occurrence is counted unconditionally and the REFUSAL separately.
-	    if (!wallStillThere && pendingBreaks != null && !pendingBreaks.isEmpty()) {
-	        wallAlreadyAir++;
-	        if (TungstenConfig.get().wallShortcutNeedsAWall) wallSkipRefused++;
-	    }
-	    if (pendingBreaks != null && !pendingBreaks.isEmpty()
-	            && (wallStillThere || !TungstenConfig.get().wallShortcutNeedsAWall)
-	            && blockPath.get().size() <= 2
-	            && player.getEyePos().distanceTo(net.minecraft.util.math.Vec3d.ofCenter(pendingBreaks.get(0))) < 4.0) {
-	        Debug.logMessage("At the wall — mining without a physics leg");
-	        TungstenModDataContainer.EXECUTOR.setPath(new ArrayList<>());
-	        TungstenModDataContainer.EXECUTOR.blockPath = blockPath.get();
-	        TungstenModDataContainer.EXECUTOR.startBreaking(pendingBreaks);
-	        PathFinder.blockPath = Optional.empty();
-	        return;
-	    }
+            // Already standing at the wall: the truncated guidance is a stub the
+            // physics search starves on ("Ran out of nodes" with nothing emitted).
+            // Skip the physics leg — hand the executor an empty path with the break
+            // queue, mining starts immediately and the goto retry drives the rest.
+            // ⛔ AND ONLY IF THERE IS STILL A WALL. This shortcut trades the physics leg for a
+            // break, so with every planned block already air it skips the leg for no work at all --
+            // and nothing walks the body through the hole it made a moment ago. That is the stall:
+            // mine, clear the path, return, retry, find the same truncated path, mine again. The
+            // 636 ms "Mining done" is the tell.
+            boolean wallStillThere = false;
+            if (pendingBreaks != null) {
+                for (net.minecraft.util.math.BlockPos bp : pendingBreaks) {
+                    if (!world.getBlockState(bp).isAir()) { wallStillThere = true; break; }
+                }
+            }
+            // ⛔ COUNT THE CASE, NOT THE FLAG. This tally used to sit behind wallShortcutNeedsAWall,
+            // so with the guard off it read 0 and said nothing -- which reads exactly like "the wall is
+            // always still there". That is the third counter in this file family blinded the same way
+            // (bsStub was unreachable behind salvage()'s early return, and read 0 through two passes of
+            // hunting). A control arm must report how much material the guard WOULD have had, so the
+            // occurrence is counted unconditionally and the REFUSAL separately.
+            if (!wallStillThere && pendingBreaks != null && !pendingBreaks.isEmpty()) {
+                wallAlreadyAir++;
+                if (TungstenConfig.get().wallShortcutNeedsAWall) wallSkipRefused++;
+            }
+            if (pendingBreaks != null && !pendingBreaks.isEmpty()
+                    && (wallStillThere || !TungstenConfig.get().wallShortcutNeedsAWall)
+                    && blockPath.get().size() <= 2
+                    && player.getEyePos().distanceTo(net.minecraft.util.math.Vec3d.ofCenter(pendingBreaks.get(0))) < 4.0) {
+                Debug.logMessage("At the wall — mining without a physics leg");
+                TungstenModDataContainer.EXECUTOR.setPath(new ArrayList<>());
+                TungstenModDataContainer.EXECUTOR.blockPath = blockPath.get();
+                TungstenModDataContainer.EXECUTOR.startBreaking(pendingBreaks);
+                PathFinder.blockPath = Optional.empty();
+                return;
+            }
 
-	    // DIAGNOSTIC (behind verboseDebugLogging): dump the guide the physics search is about
-	    // to work with, together with the bot's real position. Three attempts to hook the
-	    // pillar mechanism failed because a condition over these nodes never matched, and
-	    // guessing at their coordinate convention has already produced two off-by-one bugs
-	    // today. Print them instead of assuming.
-	    if (TungstenConfig.get().verboseDebugLogging && blockPath.isPresent()) {
-	        StringBuilder sb = new StringBuilder();
-	        Vec3d me = player.getEntityPos();
-	        sb.append(String.format("GUIDE bot=(%.1f,%.1f,%.1f) n=%d:",
-	                me.x, me.y, me.z, blockPath.get().size()));
-	        int shown = 0;
-	        for (BlockNode n : blockPath.get()) {
-	            Vec3d np = n.getPos(true, world);
-	            sb.append(String.format(" (%.1f,%.1f,%.1f)", np.x, np.y, np.z));
-	            if (++shown >= 4) { sb.append(" ..."); break; }
-	        }
-	        // ALSO the tail: whether the guide ends at the obstacle or on top of it is the
-	        // whole question, and printing only the head hid it for four attempts.
-	        int n = blockPath.get().size();
-	        for (int i = Math.max(n - 3, shown); i < n; i++) {
-	            Vec3d np = blockPath.get().get(i).getPos(true, world);
-	            sb.append(String.format(" END(%.1f,%.1f,%.1f)", np.x, np.y, np.z));
-	        }
-	        Debug.logMessage(sb.toString());
-	    }
+            // DIAGNOSTIC (behind verboseDebugLogging): dump the guide the physics search is about
+            // to work with, together with the bot's real position. Three attempts to hook the
+            // pillar mechanism failed because a condition over these nodes never matched, and
+            // guessing at their coordinate convention has already produced two off-by-one bugs
+            // today. Print them instead of assuming.
+            if (TungstenConfig.get().verboseDebugLogging && blockPath.isPresent()) {
+                StringBuilder sb = new StringBuilder();
+                Vec3d me = player.getEntityPos();
+                sb.append(String.format("GUIDE bot=(%.1f,%.1f,%.1f) n=%d:",
+                        me.x, me.y, me.z, blockPath.get().size()));
+                int shown = 0;
+                for (BlockNode n : blockPath.get()) {
+                    Vec3d np = n.getPos(true, world);
+                    sb.append(String.format(" (%.1f,%.1f,%.1f)", np.x, np.y, np.z));
+                    if (++shown >= 4) { sb.append(" ..."); break; }
+                }
+                // ALSO the tail: whether the guide ends at the obstacle or on top of it is the
+                // whole question, and printing only the head hid it for four attempts.
+                int n = blockPath.get().size();
+                for (int i = Math.max(n - 3, shown); i < n; i++) {
+                    Vec3d np = blockPath.get().get(i).getPos(true, world);
+                    sb.append(String.format(" END(%.1f,%.1f,%.1f)", np.x, np.y, np.z));
+                }
+                Debug.logMessage(sb.toString());
+            }
 
-	    // At the gap: the guidance is a stub the physics search starves on (can't sim onto
-	    // a not-yet-placed floor). Skip the physics leg — hand the executor an empty path
-	    // with the place queue; bridging starts immediately and the goto retry drives the
-	    // rest of the now-bridged world. Mirror of the break handoff above.
-	    // NOTE: the `size() <= 2` gate is LOAD-BEARING — it fires the handoff only when the
-	    // bot is AT the edge, so between paves the physics leg walks the bot forward onto the
-	    // just-placed floor. Dropping it (fire on reach alone) made the handoff monopolise
-	    // with empty paths and the bot never advanced -> 0/8. The residual ~50% flakiness is
-	    // NOT here: it's the block-space search occasionally returning a fall-partial (no
-	    // bridge planned that find()) so the physics leg sims ACROSS the gap and falls — a
-	    // #1.6.1 search-reliability problem, tracked separately.
-	    if (pendingPlaces != null && !pendingPlaces.isEmpty()
-	            && blockPath.get().size() <= 2
-	            && player.getEyePos().distanceTo(net.minecraft.util.math.Vec3d.ofCenter(pendingPlaces.get(0))) < 5.0) {
-	        // THE PLANK UNDER MY OWN FEET IS A PILLAR, NOT A BRIDGE (docs/BARITONE-GAPS.md G28).
-	        // A pending place in the cell the body occupies cannot be click-placed from any side;
-	        // handing it to the bridge placer produced "Bridge place aborted (TIMEOUT) ...
-	        // target=<own feet cell>" every 30 s for six minutes on the 2026-09-11 pit stall. The
-	        // move it describes is a pillar step, and PillarTask performs that one.
-	        if (TungstenConfig.get().ownCellPlaceIsPillar
-	                && PathExecutor.cellHoldsTheBody(player, pendingPlaces.get(0))) {
-	            PathExecutor.ownCellPlaceAsPillar++;
-	            Debug.logMessage("At the gap — the plank is under my own feet: pillaring instead");
-	            if (!kaptainwutax.tungsten.task.PillarTask.isActive()) {
-	                kaptainwutax.tungsten.task.PillarTask.startTo(pendingPlaces.get(0).getY() + 1);
-	            }
-	            PathFinder.blockPath = Optional.empty();
-	            return;
-	        }
-	        Debug.logMessage("At the gap — bridging without a physics leg");
-	        TungstenModDataContainer.EXECUTOR.setPath(new ArrayList<>());
-	        TungstenModDataContainer.EXECUTOR.blockPath = blockPath.get();
-	        TungstenModDataContainer.EXECUTOR.placeQueue = new ArrayList<>(pendingPlaces);
-	        PathFinder.blockPath = Optional.empty();
-	        return;
-	    }
+            // At the gap: the guidance is a stub the physics search starves on (can't sim onto
+            // a not-yet-placed floor). Skip the physics leg — hand the executor an empty path
+            // with the place queue; bridging starts immediately and the goto retry drives the
+            // rest of the now-bridged world. Mirror of the break handoff above.
+            // NOTE: the `size() <= 2` gate is LOAD-BEARING — it fires the handoff only when the
+            // bot is AT the edge, so between paves the physics leg walks the bot forward onto the
+            // just-placed floor. Dropping it (fire on reach alone) made the handoff monopolise
+            // with empty paths and the bot never advanced -> 0/8. The residual ~50% flakiness is
+            // NOT here: it's the block-space search occasionally returning a fall-partial (no
+            // bridge planned that find()) so the physics leg sims ACROSS the gap and falls — a
+            // #1.6.1 search-reliability problem, tracked separately.
+            if (pendingPlaces != null && !pendingPlaces.isEmpty()
+                    && blockPath.get().size() <= 2
+                    && player.getEyePos().distanceTo(net.minecraft.util.math.Vec3d.ofCenter(pendingPlaces.get(0))) < 5.0) {
+                // THE PLANK UNDER MY OWN FEET IS A PILLAR, NOT A BRIDGE (docs/BARITONE-GAPS.md G28).
+                // A pending place in the cell the body occupies cannot be click-placed from any side;
+                // handing it to the bridge placer produced "Bridge place aborted (TIMEOUT) ...
+                // target=<own feet cell>" every 30 s for six minutes on the 2026-09-11 pit stall. The
+                // move it describes is a pillar step, and PillarTask performs that one.
+                if (TungstenConfig.get().ownCellPlaceIsPillar
+                        && PathExecutor.cellHoldsTheBody(player, pendingPlaces.get(0))) {
+                    PathExecutor.ownCellPlaceAsPillar++;
+                    Debug.logMessage("At the gap — the plank is under my own feet: pillaring instead");
+                    if (!kaptainwutax.tungsten.task.PillarTask.isActive()) {
+                        kaptainwutax.tungsten.task.PillarTask.startTo(pendingPlaces.get(0).getY() + 1);
+                    }
+                    PathFinder.blockPath = Optional.empty();
+                    return;
+                }
+                Debug.logMessage("At the gap — bridging without a physics leg");
+                TungstenModDataContainer.EXECUTOR.setPath(new ArrayList<>());
+                TungstenModDataContainer.EXECUTOR.blockPath = blockPath.get();
+                TungstenModDataContainer.EXECUTOR.placeQueue = new ArrayList<>(pendingPlaces);
+                PathFinder.blockPath = Optional.empty();
+                return;
+            }
 
-	    // A break/place plan means the guide was TRUNCATED at an obstacle, so the real goal
-	    // sits behind something that does not exist yet — an unmined wall, an unbuilt floor,
-	    // the far side of a pool or a bounce. Searching for it cannot succeed, and the
-	    // search dutifully spends its whole 20 s budget before reporting "goal unreachable":
-	    // measured at 180 such attempts on nav_break and 232 on nav_slime, i.e. the entire
-	    // run wasted. The shortcuts above only rescue the case where the bot is ALREADY at
-	    // the obstacle.
-	    //
-	    // From further out the physics leg's job is just to DELIVER the bot to the obstacle;
-	    // the matching mechanism (mining / bridging / swimming) then changes the world and
-	    // the route is recomputed. So aim at the end of the truncated guide, not through it.
-	    //
-	    // NOTE ON SHAPE: `target` is captured by a lambda further down and must stay
-	    // effectively final, so the parameter is `targetIn` and the effective target is this
-	    // final local. Every use below is unchanged.
-	    Vec3d approach = targetIn;
-	    boolean obstaclePlanned = (pendingBreaks != null && !pendingBreaks.isEmpty())
-	            || (pendingPlaces != null && !pendingPlaces.isEmpty());
-	    if (obstaclePlanned && !blockPath.get().isEmpty()) {
-	        Vec3d stubEnd = blockPath.get().get(blockPath.get().size() - 1).getPos(true, world);
-	        if (stubEnd.distanceTo(targetIn) > 1.5) {
-	            approach = stubEnd;
-	            if (TungstenConfig.get().verboseDebugLogging) {
-	                Debug.logMessage(String.format(
-	                        "Obstacle ahead — physics aims at the approach point (%.1f,%.1f,%.1f)",
-	                        approach.x, approach.y, approach.z));
-	            }
-	        }
-	    }
-	    final Vec3d target = approach;
-	    // WHERE DOES THE GUIDE ACTUALLY LEAD? The physics stops 11.3 blocks from a 14.3 block
-	    // goal, and the one remaining candidate is that the coarse path points somewhere the
-	    // physics cannot step to. Record its endpoint and length next to the goal it is meant to
-	    // serve, so the two can be compared instead of assumed to agree.
-	    try {
-	        if (blockPath.isPresent() && !blockPath.get().isEmpty()) {
-	            var lastGuide = blockPath.get().get(blockPath.get().size() - 1).getPos(true, world);
-	            // AND NODE 1, because that is the hop the physics cannot take: idx never passes 1.
-	            var n0 = blockPath.get().get(0).getPos(true, world);
-	            var n1 = blockPath.get().size() > 1
-	                    ? blockPath.get().get(1).getPos(true, world) : lastGuide;
-	            guideInfo = String.format(java.util.Locale.ROOT,
-	                    "n%d n0y%.1f n1[%.1f,%.1f,%.1f]d%.1f dy01%.1f end[%.1f,%.1f,%.1f]toTgt%.1f",
-	                    blockPath.get().size(), n0.y, n1.x, n1.y, n1.z,
-	                    n1.distanceTo(player.getEntityPos()), n1.y - n0.y,
-	                    lastGuide.x, lastGuide.y, lastGuide.z,
-	                    lastGuide.distanceTo(targetIn));
-	        }
-	    } catch (Throwable ignored) {
-	    }
+            // A break/place plan means the guide was TRUNCATED at an obstacle, so the real goal
+            // sits behind something that does not exist yet — an unmined wall, an unbuilt floor,
+            // the far side of a pool or a bounce. Searching for it cannot succeed, and the
+            // search dutifully spends its whole 20 s budget before reporting "goal unreachable":
+            // measured at 180 such attempts on nav_break and 232 on nav_slime, i.e. the entire
+            // run wasted. The shortcuts above only rescue the case where the bot is ALREADY at
+            // the obstacle.
+            //
+            // From further out the physics leg's job is just to DELIVER the bot to the obstacle;
+            // the matching mechanism (mining / bridging / swimming) then changes the world and
+            // the route is recomputed. So aim at the end of the truncated guide, not through it.
+            //
+            // NOTE ON SHAPE: `target` is captured by a lambda further down and must stay
+            // effectively final, so the parameter is `targetIn` and the effective target is this
+            // final local. Every use below is unchanged.
+            Vec3d approach = targetIn;
+            boolean obstaclePlanned = (pendingBreaks != null && !pendingBreaks.isEmpty())
+                    || (pendingPlaces != null && !pendingPlaces.isEmpty());
+            if (obstaclePlanned && !blockPath.get().isEmpty()) {
+                Vec3d stubEnd = blockPath.get().get(blockPath.get().size() - 1).getPos(true, world);
+                if (stubEnd.distanceTo(targetIn) > 1.5) {
+                    approach = stubEnd;
+                    if (TungstenConfig.get().verboseDebugLogging) {
+                        Debug.logMessage(String.format(
+                                "Obstacle ahead — physics aims at the approach point (%.1f,%.1f,%.1f)",
+                                approach.x, approach.y, approach.z));
+                    }
+                }
+            }
+            final Vec3d target = approach;
+            // WHERE DOES THE GUIDE ACTUALLY LEAD? The physics stops 11.3 blocks from a 14.3 block
+            // goal, and the one remaining candidate is that the coarse path points somewhere the
+            // physics cannot step to. Record its endpoint and length next to the goal it is meant to
+            // serve, so the two can be compared instead of assumed to agree.
+            try {
+                if (blockPath.isPresent() && !blockPath.get().isEmpty()) {
+                    var lastGuide = blockPath.get().get(blockPath.get().size() - 1).getPos(true, world);
+                    // AND NODE 1, because that is the hop the physics cannot take: idx never passes 1.
+                    var n0 = blockPath.get().get(0).getPos(true, world);
+                    var n1 = blockPath.get().size() > 1
+                            ? blockPath.get().get(1).getPos(true, world) : lastGuide;
+                    guideInfo = String.format(java.util.Locale.ROOT,
+                            "n%d n0y%.1f n1[%.1f,%.1f,%.1f]d%.1f dy01%.1f end[%.1f,%.1f,%.1f]toTgt%.1f",
+                            blockPath.get().size(), n0.y, n1.x, n1.y, n1.z,
+                            n1.distanceTo(player.getEntityPos()), n1.y - n0.y,
+                            lastGuide.x, lastGuide.y, lastGuide.z,
+                            lastGuide.distanceTo(targetIn));
+                }
+            } catch (Throwable ignored) {
+            }
 
-	    rerootExhausted = false;
-	    // PER-SEARCH, not lifetime: the halt record is only readable when the index and the
-	    // guide it indexes belong to the same search.
-	    guideIdxThisSearch = 0;
-	    guideFurthestAt = null;
-	    guideNearestCm = 0;
-	    guideGoalTests = 0;
-	    bestHeuristicSoFar = initializeBestHeuristics(this.start);
-	    openSet = new BinaryHeapOpenSet();
-	    openSet.insert(this.start);
-	    closed.clear();
+            rerootExhausted = false;
+            // PER-SEARCH, not lifetime: the halt record is only readable when the index and the
+            // guide it indexes belong to the same search.
+            guideIdxThisSearch = 0;
+            guideFurthestAt = null;
+            guideNearestCm = 0;
+            guideGoalTests = 0;
+            bestHeuristicSoFar = initializeBestHeuristics(this.start);
+            openSet = new BinaryHeapOpenSet();
+            openSet.insert(this.start);
+            closed.clear();
 
-	    int yieldCounter = 0;
-	    while (!openSet.isEmpty()) {
-	    	// GIVE THE CLIENT ITS CPU BACK. Thread priority is advisory and the
-	    	// stand runs on few cores: a physics search grinding to its timeout
-	    	// starved the render/tick thread to 1-4 fps, and a bot that gets two
-	    	// ticks per second cannot press movement keys — it stood still with a
-	    	// valid plan while this loop spun (measured: fps recovers to 15-17 the
-	    	// instant the search gives up). Sleeping ~1ms per batch costs the
-	    	// search almost nothing and keeps the game playable.
-	    	if ((++yieldCounter & 0xFF) == 0) {
-	    		try { Thread.sleep(1); } catch (InterruptedException ignored) {}
-	    	}
-		    if (blockPath.isEmpty() || blockPath.get().size() < 1) {
-		    	// ⛔ THE GUIDE VANISHED UNDER A RUNNING SEARCH, AND THIS USED TO RETURN SILENTLY.
-		    	//
-		    	// blockPath is the SHARED STATIC field, and four places assign Optional.empty() to
-		    	// it -- the wall shortcut, the gap shortcut, the restart and the resume. Any of them
-		    	// on any thread kills a search already in flight, and it died without emitting a
-		    	// route, without a counter and without a log line.
-		    	//
-		    	// Measured on flat ground with no obstacles: bs=143/143 (the coarse search finishes
-		    	// every time), emptyPathRefused=0 (nothing is handed over at all), physicsRanOut=1
-		    	// (not exhaustion either) -- and exArrived=51 with exSprint=0/0, the executor
-		    	// re-reporting arrival on a path it finished long ago.
-		    	//
-		    	// The exhaustion branch below already hands back the best partial route rather than
-		    	// nothing. Same mercy here.
-		    	guideVanished++;
-		    	if (TungstenConfig.get().vanishedGuideSalvagesRoute
-		    	        && setCurrentPath(target, start, player)) {
-		    		guideVanishedSalvaged++;
-		    		Debug.logMessage("Guide vanished mid-search — advancing on the best partial route");
-		    	}
-		    	return;
-		    }
-	        if (stop.get()) {
-	        	// COUNT THE ABORT. This is the last exit of the physics loop that left no trace,
-	        	// and the elimination points here: on flat ground the coarse search finishes 139
-	        	// times while emptyPathRefused=0, guideVanished=1 and physicsRanOut=1, so almost
-	        	// every search ends somewhere else -- and this is what is left.
-	        	//
-	        	// The drive sets stop from its own stall detector (14 s without improvement, and
-	        	// the stall reset). A bot that is not moving trips that detector, the detector
-	        	// aborts the search, and the abort is why it cannot start moving. Self-sustaining.
-	        	searchAborted++;
-	        	RenderHelper.clearRenderers();
-	            break;
-	        }
-	
-	        if (blockPath.isPresent() && TungstenModRenderContainer.BLOCK_PATH_RENDERER.isEmpty()) {
-	        	RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
-	        }
-	
-	        Node next = openSet.removeLowest();
-	        
+            int yieldCounter = 0;
+            while (!openSet.isEmpty()) {
+                // GIVE THE CLIENT ITS CPU BACK. Thread priority is advisory and the
+                // stand runs on few cores: a physics search grinding to its timeout
+                // starved the render/tick thread to 1-4 fps, and a bot that gets two
+                // ticks per second cannot press movement keys — it stood still with a
+                // valid plan while this loop spun (measured: fps recovers to 15-17 the
+                // instant the search gives up). Sleeping ~1ms per batch costs the
+                // search almost nothing and keeps the game playable.
+                if ((++yieldCounter & 0xFF) == 0) {
+                        try { Thread.sleep(1); } catch (InterruptedException ignored) {}
+                }
+                    if (blockPath.isEmpty() || blockPath.get().size() < 1) {
+                        // ⛔ THE GUIDE VANISHED UNDER A RUNNING SEARCH, AND THIS USED TO RETURN SILENTLY.
+                        //
+                        // blockPath is the SHARED STATIC field, and four places assign Optional.empty() to
+                        // it -- the wall shortcut, the gap shortcut, the restart and the resume. Any of them
+                        // on any thread kills a search already in flight, and it died without emitting a
+                        // route, without a counter and without a log line.
+                        //
+                        // Measured on flat ground with no obstacles: bs=143/143 (the coarse search finishes
+                        // every time), emptyPathRefused=0 (nothing is handed over at all), physicsRanOut=1
+                        // (not exhaustion either) -- and exArrived=51 with exSprint=0/0, the executor
+                        // re-reporting arrival on a path it finished long ago.
+                        //
+                        // The exhaustion branch below already hands back the best partial route rather than
+                        // nothing. Same mercy here.
+                        guideVanished++;
+                        if (TungstenConfig.get().vanishedGuideSalvagesRoute
+                                && setCurrentPath(target, start, player)) {
+                                guideVanishedSalvaged++;
+                                Debug.logMessage("Guide vanished mid-search — advancing on the best partial route");
+                        }
+                        return;
+                    }
+                if (stop.get()) {
+                        // COUNT THE ABORT. This is the last exit of the physics loop that left no trace,
+                        // and the elimination points here: on flat ground the coarse search finishes 139
+                        // times while emptyPathRefused=0, guideVanished=1 and physicsRanOut=1, so almost
+                        // every search ends somewhere else -- and this is what is left.
+                        //
+                        // The drive sets stop from its own stall detector (14 s without improvement, and
+                        // the stall reset). A bot that is not moving trips that detector, the detector
+                        // aborts the search, and the abort is why it cannot start moving. Self-sustaining.
+                        searchAborted++;
+                        RenderHelper.clearRenderers();
+                    break;
+                }
+        
+                if (blockPath.isPresent() && TungstenModRenderContainer.BLOCK_PATH_RENDERER.isEmpty()) {
+                        RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                }
+        
+                Node next = openSet.removeLowest();
+                
             // Search for a path without fall damage
             if (checkForFallDamage(next, world)) {
-            	continue;
+                continue;
             }
-	
+        
 
 
-	        if (isPathComplete(next, target, failing, world)) {
-	            if (tryExecutePath(next, target, minVelocity)) {
-	            	TungstenModRenderContainer.RENDERERS.clear();
-	            	TungstenModRenderContainer.TEST.clear();
-	    			closed.clear();
-	    			PathFinder.blockPath = Optional.empty();
-	                return;
-	            }
-	        } else if ((numNodesConsidered.get() & (timeCheckInterval - 1)) == 0 && blockPath.isPresent() && NEXT_CLOSEST_BLOCKNODE_IDX.get() == (blockPath.get().size()-1) && blockPath.get().getLast().getPos(true, world).distanceTo(target) > 5 && System.currentTimeMillis() - lastProgressMs < HARD_SEARCH_CAP_MS) {
-    			BlockNode lastBlockNode = blockPath.get().getLast();
-	        	if (setCurrentPath(TARGET, next, TungstenModDataContainer.player)) {
-	        		TungstenModRenderContainer.RENDERERS.clear();
-	        		TungstenModRenderContainer.TEST.clear();
-	    			closed.clear();
-					try { Thread.sleep(500); } catch (InterruptedException e) { e.printStackTrace(); }
-					while (TungstenModDataContainer.EXECUTOR.isRunning()) {
-						if (stop.get()) return;
-						if (TungstenModDataContainer.EXECUTOR.getPath().size() - TungstenModDataContainer.EXECUTOR.getCurrentTick() < 50) break;
-						try { Thread.sleep(500); } catch (InterruptedException e) { e.printStackTrace(); }
-					}
-	    		    // 220ms starved the freshly re-rooted search — handleTimeout
-	    		    // fired before any real expansion happened past this point
-	    		    primaryTimeoutTime = System.currentTimeMillis() + 3000L;
-	        		if (blockPath.get().getLast().getPos(true, world).distanceTo(player.getEntityPos()) < 20) {
-		    			int attempt = 0;
-		    			while (attempt < 3) {
+                if (isPathComplete(next, target, failing, world)) {
+                    if (tryExecutePath(next, target, minVelocity)) {
+                        TungstenModRenderContainer.RENDERERS.clear();
+                        TungstenModRenderContainer.TEST.clear();
+                                closed.clear();
+                                PathFinder.blockPath = Optional.empty();
+                        return;
+                    }
+                } else if ((numNodesConsidered.get() & (timeCheckInterval - 1)) == 0 && blockPath.isPresent() && NEXT_CLOSEST_BLOCKNODE_IDX.get() == (blockPath.get().size()-1) && blockPath.get().getLast().getPos(true, world).distanceTo(target) > 5 && System.currentTimeMillis() - lastProgressMs < HARD_SEARCH_CAP_MS) {
+                        BlockNode lastBlockNode = blockPath.get().getLast();
+                        if (setCurrentPath(TARGET, next, TungstenModDataContainer.player)) {
+                                TungstenModRenderContainer.RENDERERS.clear();
+                                TungstenModRenderContainer.TEST.clear();
+                                closed.clear();
+                                        try { Thread.sleep(500); } catch (InterruptedException e) { e.printStackTrace(); }
+                                        while (TungstenModDataContainer.EXECUTOR.isRunning()) {
+                                                if (stop.get()) return;
+                                                if (TungstenModDataContainer.EXECUTOR.getPath().size() - TungstenModDataContainer.EXECUTOR.getCurrentTick() < 50) break;
+                                                try { Thread.sleep(500); } catch (InterruptedException e) { e.printStackTrace(); }
+                                        }
+                            // 220ms starved the freshly re-rooted search — handleTimeout
+                            // fired before any real expansion happened past this point
+                            primaryTimeoutTime = System.currentTimeMillis() + 3000L;
+                                if (blockPath.get().getLast().getPos(true, world).distanceTo(player.getEntityPos()) < 20) {
+                                        int attempt = 0;
+                                        while (attempt < 3) {
                             if (stop.get()) break;
-		    				PathFinder.blockPath = findBlockPath(world, lastBlockNode, target, player);
-			    		    if (blockPath.isPresent()) {
-			    		    	NEXT_CLOSEST_BLOCKNODE_IDX.set(1);
-			    	        	RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
-			    	        	break;
-			    	        }
-			    		    attempt++;
-			    		    try {
-								Thread.sleep(250);
-							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
-						}
-		    		    if (blockPath.isEmpty()) {
-		    	        	Debug.logMessage("Failed to find furhter path!");
-		    		    }
-	        		}
-	    		    continue;
-	            }
-	        }
-	
-	        // ⛔ A RE-ROOT THAT BUYS NOTHING RESTARTS THE SEARCH FOR NOTHING. The branch below
-	        // throws away the frontier AND the closed set, so if the guide comes back no longer
-	        // than it went in, the search begins again every eight nodes and never gets deep
-	        // enough to emit. Measured: emit/salvage/resetEmit all zero against bs=143/144.
-	        if (rerootExhausted && TungstenConfig.get().rerootMustExtendTheGuide) {
-	            // fall through: search on with the guide we have
-	        } else if (shouldResetSearch(numNodesConsidered.get(), blockPath, next, target)) {
-	            final int guideBefore = blockPath.isPresent() ? blockPath.get().size() : 0;
-	        	if (TungstenModDataContainer.EXECUTOR.isRunning()) {
-	        		TungstenModDataContainer.EXECUTOR.cb = () -> {
-	        			blockPath = resetSearch(next, world, blockPath, target, player);
-	        		};
-	        	} else {
-	        		// Executor idle: nothing was emitted yet. The deferred callback
-	        		// would never fire, and re-rooting without emitting hands the
-	        		// executor a path that starts far from the player (instant
-	        		// drift abort). Emit the prefix and extend the block path now.
-	        		blockPath = resetSearch(next, world, blockPath, target, player);
-	        	}
-	            final int guideAfter = blockPath.isPresent() ? blockPath.get().size() : 0;
-	            if (TungstenConfig.get().rerootMustExtendTheGuide && guideAfter <= guideBefore) {
-	                resetNoGain++;
-	                rerootExhausted = true;   // do not restart the search again for this one
-	                continue;
-	            }
-	            openSet = new BinaryHeapOpenSet();
-	            this.start = initializeStartNode(next, target);
-	            openSet.insert(this.start);
-	            // The re-rooted search MUST NOT emit chains from the old root:
-	            // stale bestSoFar entries made handleTimeout hand the executor a
-	            // path starting where the bot no longer is (drift abort at tick 1).
-	            bestHeuristicSoFar = initializeBestHeuristics(this.start);
-	            closed.clear();
-	            while (TungstenModDataContainer.EXECUTOR.isRunning()) {
-	                if (stop.get()) break;
-	                try { Thread.sleep(500); } catch (InterruptedException e) { e.printStackTrace(); }
-	            }
-	            continue;
-	        }
+                                                PathFinder.blockPath = findBlockPath(world, lastBlockNode, target, player);
+                                            if (blockPath.isPresent()) {
+                                                NEXT_CLOSEST_BLOCKNODE_IDX.set(1);
+                                                RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                                                break;
+                                        }
+                                            attempt++;
+                                            try {
+                                                                Thread.sleep(250);
+                                                        } catch (InterruptedException e) {
+                                                                // TODO Auto-generated catch block
+                                                                e.printStackTrace();
+                                                        }
+                                                }
+                                    if (blockPath.isEmpty()) {
+                                        Debug.logMessage("Failed to find furhter path!");
+                                    }
+                                }
+                            continue;
+                    }
+                }
+        
+                // ⛔ A RE-ROOT THAT BUYS NOTHING RESTARTS THE SEARCH FOR NOTHING. The branch below
+                // throws away the frontier AND the closed set, so if the guide comes back no longer
+                // than it went in, the search begins again every eight nodes and never gets deep
+                // enough to emit. Measured: emit/salvage/resetEmit all zero against bs=143/144.
+                if (rerootExhausted && TungstenConfig.get().rerootMustExtendTheGuide) {
+                    // fall through: search on with the guide we have
+                } else if (shouldResetSearch(numNodesConsidered.get(), blockPath, next, target)) {
+                    final int guideBefore = blockPath.isPresent() ? blockPath.get().size() : 0;
+                        if (TungstenModDataContainer.EXECUTOR.isRunning()) {
+                                TungstenModDataContainer.EXECUTOR.cb = () -> {
+                                        blockPath = resetSearch(next, world, blockPath, target, player);
+                                };
+                        } else {
+                                // Executor idle: nothing was emitted yet. The deferred callback
+                                // would never fire, and re-rooting without emitting hands the
+                                // executor a path that starts far from the player (instant
+                                // drift abort). Emit the prefix and extend the block path now.
+                                blockPath = resetSearch(next, world, blockPath, target, player);
+                        }
+                    final int guideAfter = blockPath.isPresent() ? blockPath.get().size() : 0;
+                    if (TungstenConfig.get().rerootMustExtendTheGuide && guideAfter <= guideBefore) {
+                        resetNoGain++;
+                        rerootExhausted = true;   // do not restart the search again for this one
+                        continue;
+                    }
+                    openSet = new BinaryHeapOpenSet();
+                    this.start = initializeStartNode(next, target);
+                    openSet.insert(this.start);
+                    // The re-rooted search MUST NOT emit chains from the old root:
+                    // stale bestSoFar entries made handleTimeout hand the executor a
+                    // path starting where the bot no longer is (drift abort at tick 1).
+                    bestHeuristicSoFar = initializeBestHeuristics(this.start);
+                    closed.clear();
+                    while (TungstenModDataContainer.EXECUTOR.isRunning()) {
+                        if (stop.get()) break;
+                        try { Thread.sleep(500); } catch (InterruptedException e) { e.printStackTrace(); }
+                    }
+                    continue;
+                }
 
-	        if ((numNodesConsidered.get() & (timeCheckInterval - 1)) == 0) {
-	            if (handleTimeout(startTime, primaryTimeoutTime, next, target, start, player, closed)) {
-	            	primaryTimeoutTime = System.currentTimeMillis() + 1020L;
-	            	lastProgressMs = System.currentTimeMillis();   // emitted a runnable partial = progress
-	                continue;
-	            }
-	            // G68: the caller's budget is up -- whatever partial exists goes out below, nothing
-	            // else is waited for. The navigator decides whether to ask again (with baritone's
-	            // longer failure timeout) or to give the route up.
-	            if (System.currentTimeMillis() > hardCapTime) {
-	                Debug.logWarning("Search gave up: no route within its " + budgetMs + " ms budget");
-	                gaveUpHard = true;
-	                budgetOut = true;
-	                break;
-	            }
-	            // Hard give-up: no real progress (no emit, no block-path advance) for the
-	            // cap. On open ground the physics openSet never empties, so without this
-	            // the search expands forever and the bot "computes" without moving. Stop.
-	            if (System.currentTimeMillis() - lastProgressMs > HARD_SEARCH_CAP_MS) {
-	                Debug.logWarning("Search gave up: goal unreachable after "
-	                        + (HARD_SEARCH_CAP_MS / 1000) + "s without progress");
-	                gaveUpHard = true;
-	                break;
-	            }
-	        }
-	        
-	        if (numNodesConsidered.get() % 20 == 0) {
-	        	RenderHelper.renderPathSoFar(next);
-	        }
-	
-	        failing = processNodeChildren(world, next, target, start.agent.getPos(), blockPath, openSet, closed);
+                if ((numNodesConsidered.get() & (timeCheckInterval - 1)) == 0) {
+                    if (handleTimeout(startTime, primaryTimeoutTime, next, target, start, player, closed)) {
+                        primaryTimeoutTime = System.currentTimeMillis() + 1020L;
+                        lastProgressMs = System.currentTimeMillis();   // emitted a runnable partial = progress
+                        continue;
+                    }
+                    // G68: the caller's budget is up -- whatever partial exists goes out below, nothing
+                    // else is waited for. The navigator decides whether to ask again (with baritone's
+                    // longer failure timeout) or to give the route up.
+                    if (System.currentTimeMillis() > hardCapTime) {
+                        Debug.logWarning("Search gave up: no route within its " + budgetMs + " ms budget");
+                        gaveUpHard = true;
+                        budgetOut = true;
+                        break;
+                    }
+                    // Hard give-up: no real progress (no emit, no block-path advance) for the
+                    // cap. On open ground the physics openSet never empties, so without this
+                    // the search expands forever and the bot "computes" without moving. Stop.
+                    if (System.currentTimeMillis() - lastProgressMs > HARD_SEARCH_CAP_MS) {
+                        Debug.logWarning("Search gave up: goal unreachable after "
+                                + (HARD_SEARCH_CAP_MS / 1000) + "s without progress");
+                        gaveUpHard = true;
+                        break;
+                    }
+                }
+                
+                if (numNodesConsidered.get() % 20 == 0) {
+                        RenderHelper.renderPathSoFar(next);
+                }
+        
+                failing = processNodeChildren(world, next, target, start.agent.getPos(), blockPath, openSet, closed);
 
-	        numNodesConsidered.set(numNodesConsidered.get()+1);
-	        // HOW FAR ALONG THE GUIDE DOES THE PHYSICS ACTUALLY GET? The guide has 16 nodes and
-	        // ends on the target; the physics stops 11.3 blocks short. The index it reaches names
-	        // the exact node pair it cannot step between, which is the whole question now.
-	        {
-	            int idxNow = NEXT_CLOSEST_BLOCKNODE_IDX.get();
-	            if (idxNow > guideIdxReached) guideIdxReached = idxNow;
-	            if (idxNow > guideIdxThisSearch) {
-	                guideIdxThisSearch = idxNow;
-	                guideFurthestAt = next.agent.getPos();
-	            }
-	        }
-	        if (updateNextClosestBlockNodeIDX(blockPath.get(), next, closed, world)) {
-	        	primaryTimeoutTime = System.currentTimeMillis() + 1120L;
-	        	lastProgressMs = System.currentTimeMillis();   // advanced along the block path = progress
-				failedAttempts = 0;
-	        	// A NEW OBJECTIVE NEEDS A NEW RECORD. The waypoint just moved, and updateNode
-	        	// measures estimatedCostToGoal against THAT waypoint — so the yardstick behind
-	        	// bestHeuristicSoFar has changed while the record it holds has not. With a
-	        	// positive minimumImprovement the record is monotone, so it freezes until the
-	        	// frontier physically reaches the new waypoint and bestSoFar[] lags a segment
-	        	// behind. Upstream never meets this because a PathNode's estimatedCostToGoal is
-	        	// fixed for the whole search; here the goal legitimately advances, and re-seeding
-	        	// is what "the goal changed" means. `next` is the node that reached the new
-	        	// waypoint, so it is the honest seed — the same thing setCurrentPath does on a
-	        	// re-root.
-	        	bestHeuristicSoFar = initializeBestHeuristics(next);
-	        	// (previous note, kept for the record:)
-	        	// KNOWN, DELIBERATELY NOT FIXED IN THIS PASS (C5.21 follow-up). The waypoint just
-	        	// moved, and updateNode measures estimatedCostToGoal against THAT waypoint — so
-	        	// the yardstick behind bestHeuristicSoFar has changed while the record it holds
-	        	// has not. Upstream cannot hit this: a PathNode's estimatedCostToGoal is fixed for
-	        	// the whole search. Here the record now (positive minimumImprovement) freezes
-	        	// until the frontier physically reaches the new waypoint, so bestSoFar[] lags a
-	        	// segment behind. It self-clears — each emission re-seeds via setCurrentPath, and
-	        	// nodes that reach the new waypoint beat the old record — so it costs emission
-	        	// FRESHNESS, not emission itself. Left alone on purpose: it is a behaviour change
-	        	// nobody has measured, and this pass already has one variable under test.
-	        }
-//        	if (numNodesConsidered % 5 == 0 && updateNextClosestBlockNodeIDX(blockPath.get(), next, closed)) {
-//        		List<Node> path = constructPath(next);
+                numNodesConsidered.set(numNodesConsidered.get()+1);
+                // HOW FAR ALONG THE GUIDE DOES THE PHYSICS ACTUALLY GET? The guide has 16 nodes and
+                // ends on the target; the physics stops 11.3 blocks short. The index it reaches names
+                // the exact node pair it cannot step between, which is the whole question now.
+                {
+                    int idxNow = NEXT_CLOSEST_BLOCKNODE_IDX.get();
+                    if (idxNow > guideIdxReached) guideIdxReached = idxNow;
+                    if (idxNow > guideIdxThisSearch) {
+                        guideIdxThisSearch = idxNow;
+                        guideFurthestAt = next.agent.getPos();
+                    }
+                }
+                if (updateNextClosestBlockNodeIDX(blockPath.get(), next, closed, world)) {
+                        primaryTimeoutTime = System.currentTimeMillis() + 1120L;
+                        lastProgressMs = System.currentTimeMillis();   // advanced along the block path = progress
+                                failedAttempts = 0;
+                        // A NEW OBJECTIVE NEEDS A NEW RECORD. The waypoint just moved, and updateNode
+                        // measures estimatedCostToGoal against THAT waypoint — so the yardstick behind
+                        // bestHeuristicSoFar has changed while the record it holds has not. With a
+                        // positive minimumImprovement the record is monotone, so it freezes until the
+                        // frontier physically reaches the new waypoint and bestSoFar[] lags a segment
+                        // behind. Upstream never meets this because a PathNode's estimatedCostToGoal is
+                        // fixed for the whole search; here the goal legitimately advances, and re-seeding
+                        // is what "the goal changed" means. `next` is the node that reached the new
+                        // waypoint, so it is the honest seed — the same thing setCurrentPath does on a
+                        // re-root.
+                        bestHeuristicSoFar = initializeBestHeuristics(next);
+                        // (previous note, kept for the record:)
+                        // KNOWN, DELIBERATELY NOT FIXED IN THIS PASS (C5.21 follow-up). The waypoint just
+                        // moved, and updateNode measures estimatedCostToGoal against THAT waypoint — so
+                        // the yardstick behind bestHeuristicSoFar has changed while the record it holds
+                        // has not. Upstream cannot hit this: a PathNode's estimatedCostToGoal is fixed for
+                        // the whole search. Here the record now (positive minimumImprovement) freezes
+                        // until the frontier physically reaches the new waypoint, so bestSoFar[] lags a
+                        // segment behind. It self-clears — each emission re-seeds via setCurrentPath, and
+                        // nodes that reach the new waypoint beat the old record — so it costs emission
+                        // FRESHNESS, not emission itself. Left alone on purpose: it is a behaviour change
+                        // nobody has measured, and this pass already has one variable under test.
+                }
+//              if (numNodesConsidered % 5 == 0 && updateNextClosestBlockNodeIDX(blockPath.get(), next, closed)) {
+//                      List<Node> path = constructPath(next);
 //                TungstenModDataContainer.EXECUTOR.addPath(path);
 //                Node n = path.getLast();
 //                clearParentsForBestSoFar(n);
 //                start = initializeStartNode(n, target);
-//    			closed.clear();
-//    			bestHeuristicSoFar = initializeBestHeuristics(start);
-//    		    openSet = new BinaryHeapOpenSet();
-//    		    openSet.insert(start);
-//        	}
-	        
-//	        try {
-//				Thread.sleep(250);
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-	    }
-	
-	    if (gaveUpHard) {
-	        // THE HARD GIVE-UP FELL BETWEEN THE TWO BRANCHES BELOW, AND DELIVERED NOTHING.
-	        //
-	        // stop is false here and the open set is NOT empty -- that is the whole reason the hard
-	        // cap exists, because "on open ground the physics openSet never empties". So neither
-	        // arm ran, the search returned no route at all, and the bot simply stood. The comment
-	        // under `openSet.isEmpty()` already records what that costs, learned from the twin
-	        // search: "a bot that stood in one place for ~500 seconds". Exhaustion was given the
-	        // mercy of a partial route; this exit, added later, never was.
-	        //
-	        // Measured on chop_canopy, a course where a bait log sits three blocks away and seven
-	        // up. On the failing runs:
-	        //   Search gave up: goal unreachable after 20s without progress
-	        //   t=37.9  [-6.4, -60.0, -18.4]
-	        //   t=150.9 [-6.4, -60.0, -18.4]     <- unchanged for 110 seconds
-	        // The bot walks off, the search quits, nothing comes back, and it stands there for the
-	        // rest of the run.
-	        //
-	        // setCurrentPath is the same delivery the timeout and exhaustion paths use, and
-	        // bestSoFar only yields a route with real forward progress, so a search that truly got
-	        // nowhere still ends cleanly instead of oscillating.
-	        // ⛔ BEFORE SALVAGING A SCRAP, TRY THE ROUTE THIS SEARCH WAS FORBIDDEN TO TAKE.
-	        //
-	        // The fall-guard relaxation below -- search safely, and if that fails take the damaging
-	        // route -- is wired to the EXHAUSTED branch only, and the comment above this one says
-	        // why that is the wrong exit: on open ground the physics openSet never empties. So the
-	        // branch that actually fires on real terrain has been giving up without ever asking.
-	        //
-	        // This changes nothing about what the search explores -- the pruning stays, so no extra
-	        // nodes and no shift in route preference, which is what sank permitting the drop and
-	        // pricing it. It only relaxes the guard for a search that was about to return nothing.
-	        if (TungstenConfig.get().gaveUpRetriesWithFallGuardRelaxed
-	                && failedAttempts < 2
-	                && !TungstenModDataContainer.searchIgnoresFallDamage()) {
-	            gaveUpFallRetry++;
-	            TungstenModDataContainer.fallGuardRelaxed = true;
-	            try {
-	                RenderHelper.clearRenderers();
-	                closed.clear();
-	                PathFinder.blockPath = Optional.empty();
-	                search(world, start, target, player, failedAttempts + 1);
-	            } finally {
-	                TungstenModDataContainer.fallGuardRelaxed = false;
-	                // ⛔ AND THE GUIDE MUST NOT OUTLIVE THE RELAXATION THAT BUILT IT.
-	                //
-	                // This retry builds a NEW block path with the fall guard relaxed and leaves it
-	                // in the static field. The next search finds it non-empty, skips rebuilding,
-	                // and runs the PHYSICS against it unrelaxed -- so the guide contains descents
-	                // the physics is forbidden to take.
-	                //
-	                // Measured at the 1219 stall: guide n16 with node ONE three blocks below the
-	                // bot (n1[1218.5,101.0,-842.5] against bot y=104), and the physics never
-	                // advances past idx1. Sixteen planned nodes, none of them reachable, because
-	                // the opening hop was planned under rules that no longer apply.
-	                //
-	                // Neither layer's rules change here. What changes is that a guide is only used
-	                // under the rules it was built for.
-	                if (TungstenConfig.get().guideDiesWithItsRelaxation) {
-	                    PathFinder.blockPath = Optional.empty();
-	                    relaxedGuideDropped++;
-	                }
-	            }
-	            return;
-	        }
-	        searchGaveUp++;
-	        if (budgetOut) physicsBudgetOut++;
-	        noteGuideVsPhysics("gaveUp", world, target, player);
-	        if (setCurrentPath(target, start, player)) {
-	            searchGaveUpSalvaged++;
-	            if (budgetOut) physicsBudgetOutSalvaged++;
-	            Debug.logMessage("Search gave up — advancing on the best partial route");
-	        }
-	    } else if (stop.get()) {
-	        if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("stopped!");
-	        noteGuideVsPhysics("stopped", world, target, player);
-	        stop.set(false);
-	    } else if (openSet.isEmpty()) {
-			if (failedAttempts < 2 && TungstenModDataContainer.EXECUTOR.getPath() != null) {
-				RenderHelper.clearRenderers();
-				closed.clear();
-				PathFinder.blockPath = Optional.empty();
-				Node lastNode = TungstenModDataContainer.EXECUTOR.getPath().getLast();
+//                      closed.clear();
+//                      bestHeuristicSoFar = initializeBestHeuristics(start);
+//                  openSet = new BinaryHeapOpenSet();
+//                  openSet.insert(start);
+//              }
+                
+//              try {
+//                              Thread.sleep(250);
+//                      } catch (InterruptedException e) {
+//                              // TODO Auto-generated catch block
+//                              e.printStackTrace();
+//                      }
+            }
+        
+            if (gaveUpHard) {
+                // THE HARD GIVE-UP FELL BETWEEN THE TWO BRANCHES BELOW, AND DELIVERED NOTHING.
+                //
+                // stop is false here and the open set is NOT empty -- that is the whole reason the hard
+                // cap exists, because "on open ground the physics openSet never empties". So neither
+                // arm ran, the search returned no route at all, and the bot simply stood. The comment
+                // under `openSet.isEmpty()` already records what that costs, learned from the twin
+                // search: "a bot that stood in one place for ~500 seconds". Exhaustion was given the
+                // mercy of a partial route; this exit, added later, never was.
+                //
+                // Measured on chop_canopy, a course where a bait log sits three blocks away and seven
+                // up. On the failing runs:
+                //   Search gave up: goal unreachable after 20s without progress
+                //   t=37.9  [-6.4, -60.0, -18.4]
+                //   t=150.9 [-6.4, -60.0, -18.4]     <- unchanged for 110 seconds
+                // The bot walks off, the search quits, nothing comes back, and it stands there for the
+                // rest of the run.
+                //
+                // setCurrentPath is the same delivery the timeout and exhaustion paths use, and
+                // bestSoFar only yields a route with real forward progress, so a search that truly got
+                // nowhere still ends cleanly instead of oscillating.
+                // ⛔ BEFORE SALVAGING A SCRAP, TRY THE ROUTE THIS SEARCH WAS FORBIDDEN TO TAKE.
+                //
+                // The fall-guard relaxation below -- search safely, and if that fails take the damaging
+                // route -- is wired to the EXHAUSTED branch only, and the comment above this one says
+                // why that is the wrong exit: on open ground the physics openSet never empties. So the
+                // branch that actually fires on real terrain has been giving up without ever asking.
+                //
+                // This changes nothing about what the search explores -- the pruning stays, so no extra
+                // nodes and no shift in route preference, which is what sank permitting the drop and
+                // pricing it. It only relaxes the guard for a search that was about to return nothing.
+                if (TungstenConfig.get().gaveUpRetriesWithFallGuardRelaxed
+                        && failedAttempts < 2
+                        && !TungstenModDataContainer.searchIgnoresFallDamage()) {
+                    gaveUpFallRetry++;
+                    TungstenModDataContainer.fallGuardRelaxed = true;
+                    try {
+                        RenderHelper.clearRenderers();
+                        closed.clear();
+                        PathFinder.blockPath = Optional.empty();
+                        search(world, start, target, player, failedAttempts + 1);
+                    } finally {
+                        TungstenModDataContainer.fallGuardRelaxed = false;
+                        // ⛔ AND THE GUIDE MUST NOT OUTLIVE THE RELAXATION THAT BUILT IT.
+                        //
+                        // This retry builds a NEW block path with the fall guard relaxed and leaves it
+                        // in the static field. The next search finds it non-empty, skips rebuilding,
+                        // and runs the PHYSICS against it unrelaxed -- so the guide contains descents
+                        // the physics is forbidden to take.
+                        //
+                        // Measured at the 1219 stall: guide n16 with node ONE three blocks below the
+                        // bot (n1[1218.5,101.0,-842.5] against bot y=104), and the physics never
+                        // advances past idx1. Sixteen planned nodes, none of them reachable, because
+                        // the opening hop was planned under rules that no longer apply.
+                        //
+                        // Neither layer's rules change here. What changes is that a guide is only used
+                        // under the rules it was built for.
+                        if (TungstenConfig.get().guideDiesWithItsRelaxation) {
+                            PathFinder.blockPath = Optional.empty();
+                            relaxedGuideDropped++;
+                        }
+                    }
+                    return;
+                }
+                searchGaveUp++;
+                if (budgetOut) physicsBudgetOut++;
+                noteGuideVsPhysics("gaveUp", world, target, player);
+                if (setCurrentPath(target, start, player)) {
+                    searchGaveUpSalvaged++;
+                    if (budgetOut) physicsBudgetOutSalvaged++;
+                    Debug.logMessage("Search gave up — advancing on the best partial route");
+                }
+            } else if (stop.get()) {
+                if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("stopped!");
+                noteGuideVsPhysics("stopped", world, target, player);
+                stop.set(false);
+            } else if (openSet.isEmpty()) {
+                        if (failedAttempts < 2 && TungstenModDataContainer.EXECUTOR.getPath() != null) {
+                                RenderHelper.clearRenderers();
+                                closed.clear();
+                                PathFinder.blockPath = Optional.empty();
+                                Node lastNode = TungstenModDataContainer.EXECUTOR.getPath().getLast();
 
-				search(world, lastNode, target, player, failedAttempts+1);
-				return;
-			}
-			// ⛔ AN EXHAUSTED SEARCH WITH THE FALL GUARD ON MEANS "NO SAFE ROUTE", NOT "NO ROUTE".
-			//
-			// Measured: with pathAvoidsFallDamage on, two playthrough runs froze at exactly
-			// (71.7, 120.0, -70.7), items=0, for their whole duration -- pdEnter+460 and mqSteps+0,
-			// so the driver kept asking and the queue never advanced a single step. Zero damage
-			// taken, because the bot never moved. That is why the guard shipped disabled: it is
-			// correct, and on its own it is fatal on real terrain.
-			//
-			// The guard should express a PREFERENCE, not a veto. A player does not stand on a hill
-			// for five minutes rather than take three hearts. So: search safely first, and if that
-			// exhausts, retry once with the guard relaxed and take the damaging route. The relax is
-			// cleared immediately after, so the NEXT search starts safe again.
-			if (!TungstenModDataContainer.searchIgnoresFallDamage()) {
-				fallGuardRetries++;
-				TungstenModDataContainer.fallGuardRelaxed = true;
-				try {
-					RenderHelper.clearRenderers();
-					closed.clear();
-					PathFinder.blockPath = Optional.empty();
-					search(world, start, target, player, failedAttempts);
-				} finally {
-					TungstenModDataContainer.fallGuardRelaxed = false;
-				}
-				return;
-			}
-			physicsRanOut++;
-			noteGuideVsPhysics("ranOut", world, target, player);
-			// EXHAUSTION DESERVES THE SAME MERCY AS A TIMEOUT, AND ONLY ONE OF THEM HAD IT.
-			// handleTimeout (this file, ~1129) already hands the executor the best partial route
-			// when the clock runs out; the open set emptying returned nothing at all, so the bot
-			// simply stood. Its twin, BlockSpacePathFinder, learned this the expensive way and
-			// carries TWO fallbacks with a comment recording a bot that stood in one place for
-			// ~500 seconds.
-			// Measured on nav_water with smartMoves pinned on: srch=283/0 -- this search exhausted
-			// 283 times in one run while the block-space search never did, and the failing runs
-			// show the bot never leaving the start pad.
-			// setCurrentPath is the same delivery handleTimeout uses, and bestSoFar only yields a
-			// route with real forward progress, so a search that got nowhere still gives up
-			// cleanly rather than oscillating in place.
-			if (setCurrentPath(target, start, player)) {
-				physicsRanOutSalvaged++;
-				Debug.logMessage("Ran out of nodes — advancing on the best partial route");
-			} else {
-				Debug.logMessage("Ran out of nodes!");
-			}
-	    }
-	    if (TungstenConfig.get().debugTime) {
-	        long elapsed = System.currentTimeMillis() - startTime;
-	        System.out.printf("Tungsten [search done] %dms total | %d nodes explored | openSet empty=%b | stopped=%b%n",
-	            elapsed, numNodesConsidered.get(), openSet.isEmpty(), stop.get());
-	    }
-	    RenderHelper.clearRenderers();
-		closed.clear();
-		PathFinder.blockPath = Optional.empty();
-	}
-	protected static Optional<List<Node>> bestSoFar(boolean logInfo, int numNodes, Node startNode, Vec3d realTarget) {
+                                search(world, lastNode, target, player, failedAttempts+1);
+                                return;
+                        }
+                        // ⛔ AN EXHAUSTED SEARCH WITH THE FALL GUARD ON MEANS "NO SAFE ROUTE", NOT "NO ROUTE".
+                        //
+                        // Measured: with pathAvoidsFallDamage on, two playthrough runs froze at exactly
+                        // (71.7, 120.0, -70.7), items=0, for their whole duration -- pdEnter+460 and mqSteps+0,
+                        // so the driver kept asking and the queue never advanced a single step. Zero damage
+                        // taken, because the bot never moved. That is why the guard shipped disabled: it is
+                        // correct, and on its own it is fatal on real terrain.
+                        //
+                        // The guard should express a PREFERENCE, not a veto. A player does not stand on a hill
+                        // for five minutes rather than take three hearts. So: search safely first, and if that
+                        // exhausts, retry once with the guard relaxed and take the damaging route. The relax is
+                        // cleared immediately after, so the NEXT search starts safe again.
+                        if (!TungstenModDataContainer.searchIgnoresFallDamage()) {
+                                fallGuardRetries++;
+                                TungstenModDataContainer.fallGuardRelaxed = true;
+                                try {
+                                        RenderHelper.clearRenderers();
+                                        closed.clear();
+                                        PathFinder.blockPath = Optional.empty();
+                                        search(world, start, target, player, failedAttempts);
+                                } finally {
+                                        TungstenModDataContainer.fallGuardRelaxed = false;
+                                }
+                                return;
+                        }
+                        physicsRanOut++;
+                        noteGuideVsPhysics("ranOut", world, target, player);
+                        // EXHAUSTION DESERVES THE SAME MERCY AS A TIMEOUT, AND ONLY ONE OF THEM HAD IT.
+                        // handleTimeout (this file, ~1129) already hands the executor the best partial route
+                        // when the clock runs out; the open set emptying returned nothing at all, so the bot
+                        // simply stood. Its twin, BlockSpacePathFinder, learned this the expensive way and
+                        // carries TWO fallbacks with a comment recording a bot that stood in one place for
+                        // ~500 seconds.
+                        // Measured on nav_water with smartMoves pinned on: srch=283/0 -- this search exhausted
+                        // 283 times in one run while the block-space search never did, and the failing runs
+                        // show the bot never leaving the start pad.
+                        // setCurrentPath is the same delivery handleTimeout uses, and bestSoFar only yields a
+                        // route with real forward progress, so a search that got nowhere still gives up
+                        // cleanly rather than oscillating in place.
+                        if (setCurrentPath(target, start, player)) {
+                                physicsRanOutSalvaged++;
+                                Debug.logMessage("Ran out of nodes — advancing on the best partial route");
+                        } else {
+                                Debug.logMessage("Ran out of nodes!");
+                        }
+            }
+            if (TungstenConfig.get().debugTime) {
+                long elapsed = System.currentTimeMillis() - startTime;
+                System.out.printf("Tungsten [search done] %dms total | %d nodes explored | openSet empty=%b | stopped=%b%n",
+                    elapsed, numNodesConsidered.get(), openSet.isEmpty(), stop.get());
+            }
+            RenderHelper.clearRenderers();
+                closed.clear();
+                PathFinder.blockPath = Optional.empty();
+        }
+        protected static Optional<List<Node>> bestSoFar(boolean logInfo, int numNodes, Node startNode, Vec3d realTarget) {
         if (startNode == null) {
             return Optional.empty();
         }
@@ -1162,181 +1162,181 @@ public class PathFinder {
                 Node n = bestSoFar.get(i);
                 if (!n.agent.onGround && !n.agent.touchingWater && !n.agent.isClimbing(TungstenModDataContainer.world)) continue;
                 List<Node> path = new ArrayList<>();
-				while(n.parent != null) {
-					path.add(n);
-					n = n.parent;
-				}
+                                while(n.parent != null) {
+                                        path.add(n);
+                                        n = n.parent;
+                                }
 
-				path.add(n);
-				Collections.reverse(path);
+                                path.add(n);
+                                Collections.reverse(path);
                 return Optional.of(path);
             }
         }
         return Optional.empty();
     }
-	
-	private void clearParentsForBestSoFar(Node node) {
-		for (int i = 0; i < COEFFICIENTS.length; i++) {
-			bestSoFar.set(i, null);
-		}
-	}
+        
+        private void clearParentsForBestSoFar(Node node) {
+                for (int i = 0; i < COEFFICIENTS.length; i++) {
+                        bestSoFar.set(i, null);
+                }
+        }
 
-	private boolean shouldSkipChild(Node child, Vec3d target, WorldView world) {
-	    return child.agent.touchingWater && shouldSkipNode(child, target, world);
-	}
+        private boolean shouldSkipChild(Node child, Vec3d target, WorldView world) {
+            return child.agent.touchingWater && shouldSkipNode(child, target, world);
+        }
 
-	private boolean shouldSkipNode(Node node, Vec3d target, WorldView world) {
-//	    BlockNode bN = blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get());
-//	    BlockNode lBN = blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get()-1);
-//	    boolean isBottomSlab = BlockStateChecker.isBottomSlab(TungstenMod.mc.world.getBlockState(bN.getBlockPos().down()));
-//	    Vec3d agentPos = node.agent.getPos();
-//	    Vec3d parentAgentPos = node.parent == null ? null : node.parent.agent.getPos();
-//	    if (!isBottomSlab && !node.agent.onGround && agentPos.y < bN.y && lBN != null && lBN.y <= bN.y && parentAgentPos != null && parentAgentPos.y > agentPos.y) {
-//	    	return true;
-//	    }
-	    // Clamp idx to valid range to prevent IndexOutOfBoundsException when
-	    // NEXT_CLOSEST_BLOCKNODE_IDX reaches blockPath.size() at end of path.
-	    int _idx = blockPath.isPresent()
-	        ? Math.min(NEXT_CLOSEST_BLOCKNODE_IDX.get(), blockPath.get().size() - 1)
-	        : 0;
-	    int _prevIdx = Math.max(0, _idx - 1);
-	    return shouldNodeBeSkipped(node, target, closed, true,
-	        blockPath.isPresent() && (
-	            blockPath.get().get(_idx).isDoingLongJump(world) ||
-	            blockPath.get().get(_idx).isDoingNeo() ||
-	            blockPath.get().get(_prevIdx).isDoingCornerJump()
-	        ),
-	        blockPath.isPresent() && !blockPath.get().get(_idx).isDoingNeo()
-	    );
-	}
-	
-	private static boolean shouldNodeBeSkipped(Node n, Vec3d target, Set<Integer> closed, boolean addToClosed, boolean isDoingLongJump, boolean shouldAddYaw) {
+        private boolean shouldSkipNode(Node node, Vec3d target, WorldView world) {
+//          BlockNode bN = blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get());
+//          BlockNode lBN = blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get()-1);
+//          boolean isBottomSlab = BlockStateChecker.isBottomSlab(TungstenMod.mc.world.getBlockState(bN.getBlockPos().down()));
+//          Vec3d agentPos = node.agent.getPos();
+//          Vec3d parentAgentPos = node.parent == null ? null : node.parent.agent.getPos();
+//          if (!isBottomSlab && !node.agent.onGround && agentPos.y < bN.y && lBN != null && lBN.y <= bN.y && parentAgentPos != null && parentAgentPos.y > agentPos.y) {
+//              return true;
+//          }
+            // Clamp idx to valid range to prevent IndexOutOfBoundsException when
+            // NEXT_CLOSEST_BLOCKNODE_IDX reaches blockPath.size() at end of path.
+            int _idx = blockPath.isPresent()
+                ? Math.min(NEXT_CLOSEST_BLOCKNODE_IDX.get(), blockPath.get().size() - 1)
+                : 0;
+            int _prevIdx = Math.max(0, _idx - 1);
+            return shouldNodeBeSkipped(node, target, closed, true,
+                blockPath.isPresent() && (
+                    blockPath.get().get(_idx).isDoingLongJump(world) ||
+                    blockPath.get().get(_idx).isDoingNeo() ||
+                    blockPath.get().get(_prevIdx).isDoingCornerJump()
+                ),
+                blockPath.isPresent() && !blockPath.get().get(_idx).isDoingNeo()
+            );
+        }
+        
+        private static boolean shouldNodeBeSkipped(Node n, Vec3d target, Set<Integer> closed, boolean addToClosed, boolean isDoingLongJump, boolean shouldAddYaw) {
 
-		int hashCode = n.hashCode(1, shouldAddYaw);
-	    Vec3d agentPos = n.agent.getPos();
-	    double distanceToTarget = agentPos.distanceTo(target);
+                int hashCode = n.hashCode(1, shouldAddYaw);
+            Vec3d agentPos = n.agent.getPos();
+            double distanceToTarget = agentPos.distanceTo(target);
 
-	    // Determine scaling factors based on conditions
-	    double xScale, yScale, zScale;
-	    if (distanceToTarget < 1.0 /* || n.agent.isSubmergedInWater || n.agent.isClimbing(MinecraftClient.getInstance().world) */) {
-	        xScale = 1e3;
-	        yScale = 1e3;
-	        zScale = 1e3;
-	    } else if (isDoingLongJump) {
-	        xScale = 10;
-	        yScale = 1e2;
-	        zScale = 10;
-	    } else if (n.agent.isClimbing(TungstenModDataContainer.world)) {
-	        xScale = 10;
-	        yScale = 1e4;
-	        zScale = 10;
-	    } else if (n.agent.touchingWater) {
-	        xScale = 1e3;
-	        yScale = 1e2;
-	        zScale = 1e3;
-	    } else {
-	        xScale = 100;
-	        yScale = 100;
-	        zScale = 100;
-	    }
+            // Determine scaling factors based on conditions
+            double xScale, yScale, zScale;
+            if (distanceToTarget < 1.0 /* || n.agent.isSubmergedInWater || n.agent.isClimbing(MinecraftClient.getInstance().world) */) {
+                xScale = 1e3;
+                yScale = 1e3;
+                zScale = 1e3;
+            } else if (isDoingLongJump) {
+                xScale = 10;
+                yScale = 1e2;
+                zScale = 10;
+            } else if (n.agent.isClimbing(TungstenModDataContainer.world)) {
+                xScale = 10;
+                yScale = 1e4;
+                zScale = 10;
+            } else if (n.agent.touchingWater) {
+                xScale = 1e3;
+                yScale = 1e2;
+                zScale = 1e3;
+            } else {
+                xScale = 100;
+                yScale = 100;
+                zScale = 100;
+            }
 
-	    // Compute scaled position with hashCode offset
-	    int nodeHash = computeScaledPosition(agentPos, hashCode, xScale, yScale, zScale);
+            // Compute scaled position with hashCode offset
+            int nodeHash = computeScaledPosition(agentPos, hashCode, xScale, yScale, zScale);
 
-	    // Check if the position is in the closed set
-	    if (closed.contains(nodeHash)) {
-	        return true;
-	    }
+            // Check if the position is in the closed set
+            if (closed.contains(nodeHash)) {
+                return true;
+            }
 
-	    // Optionally add the position to the closed set
-	    if (addToClosed) {
-	        closed.add(nodeHash);
-	    }
+            // Optionally add the position to the closed set
+            if (addToClosed) {
+                closed.add(nodeHash);
+            }
 
-	    return false;
-	}
+            return false;
+        }
 
-	private static int computeScaledPosition(Vec3d pos, int hashCode, double xScale, double yScale, double zScale) {
-	    return new Vec3d(
-	        Math.round(pos.x * xScale),
-	        Math.round(pos.y * yScale),
-	        Math.round(pos.z * zScale)
-	    ).hashCode() + hashCode;
-	}
-	
-	private static double computeHeuristic(Vec3d position, boolean onGround, Vec3d target, Vec3d realTarget) {
-		double xzMultiplier = 1;
-	    double dx = (target.x - position.x)*xzMultiplier;
-	    double dy = 0;
-	    if (target.y != Double.MIN_VALUE) {
-		    dy = (target.y - position.y);//* 4.8;//*16;
-//		    if (!onGround || dy > 0 && dy < 1.4) dy = 0;
-//			dy *= 1.8;
-	    }
-	    double dz = (target.z - position.z)*xzMultiplier;
+        private static int computeScaledPosition(Vec3d pos, int hashCode, double xScale, double yScale, double zScale) {
+            return new Vec3d(
+                Math.round(pos.x * xScale),
+                Math.round(pos.y * yScale),
+                Math.round(pos.z * zScale)
+            ).hashCode() + hashCode;
+        }
+        
+        private static double computeHeuristic(Vec3d position, boolean onGround, Vec3d target, Vec3d realTarget) {
+                double xzMultiplier = 1;
+            double dx = (target.x - position.x)*xzMultiplier;
+            double dy = 0;
+            if (target.y != Double.MIN_VALUE) {
+                    dy = (target.y - position.y);//* 4.8;//*16;
+//                  if (!onGround || dy > 0 && dy < 1.4) dy = 0;
+//                      dy *= 1.8;
+            }
+            double dz = (target.z - position.z)*xzMultiplier;
 
-		double realTargetDist = DistanceCalculator.getEuclideanDistance(position, realTarget);
+                double realTargetDist = DistanceCalculator.getEuclideanDistance(position, realTarget);
 
-	    return
-				(Math.sqrt(dx * dx + dy * dy + dz * dz) * 0.8
-	    		 + (((blockPath.map(blockNodes -> blockNodes.size() - NEXT_CLOSEST_BLOCKNODE_IDX.get()).orElse(0))) * 0.0)
-	    		+ (realTargetDist)
-	    		);
-	}
-	
-	private static void updateNode(WorldView world, Node current, Node child, Vec3d target, Vec3d realTarget, List<BlockNode> blockPath, Set<Integer> closed) {
-	    Vec3d childPos = child.agent.getPos();
+            return
+                                (Math.sqrt(dx * dx + dy * dy + dz * dz) * 0.8
+                         + (((blockPath.map(blockNodes -> blockNodes.size() - NEXT_CLOSEST_BLOCKNODE_IDX.get()).orElse(0))) * 0.0)
+                        + (realTargetDist)
+                        );
+        }
+        
+        private static void updateNode(WorldView world, Node current, Node child, Vec3d target, Vec3d realTarget, List<BlockNode> blockPath, Set<Integer> closed) {
+            Vec3d childPos = child.agent.getPos();
 
-	    double collisionScore = 0;
-	    double tentativeCost = child.cost + 1; // Assuming uniform cost for each step
-//	    if (child.agent.horizontalCollision && child.agent.getPos().distanceTo(target) > 3) {
-//	        collisionScore += 25 + (Math.abs(0.3 - child.agent.velZ) + Math.abs(0.3 - child.agent.velX)) * (child.agent.blockY <= blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).getBlockPos().getY() ? 2 : 1);
-//	    }
-	    /*
-	    if (child.agent.touchingWater) {
-//	    	collisionScore = 20000^20;
-	    	if (BlockStateChecker.isAnyWater(world.getBlockState(blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).getBlockPos()))) collisionScore -= 20;
-//	    	else collisionScore += 2000;
+            double collisionScore = 0;
+            double tentativeCost = child.cost + 1; // Assuming uniform cost for each step
+//          if (child.agent.horizontalCollision && child.agent.getPos().distanceTo(target) > 3) {
+//              collisionScore += 25 + (Math.abs(0.3 - child.agent.velZ) + Math.abs(0.3 - child.agent.velX)) * (child.agent.blockY <= blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).getBlockPos().getY() ? 2 : 1);
+//          }
+            /*
+            if (child.agent.touchingWater) {
+//              collisionScore = 20000^20;
+                if (BlockStateChecker.isAnyWater(world.getBlockState(blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).getBlockPos()))) collisionScore -= 20;
+//              else collisionScore += 2000;
 
-	    } else {
-	    	float forwardSpeedScore = 0.98f - Math.abs(child.agent.forwardSpeed);
-	    	float sidewaysSpeedScore = 0.98f - Math.abs(child.agent.sidewaysSpeed);
-	    	collisionScore +=
-//	    			(sidewaysSpeedScore > 1e-8 || sidewaysSpeedScore < -1e-8 ? 5 : 0 )
-	    			 (forwardSpeedScore > 1e-8 || forwardSpeedScore < -1e-8 ? 15 : 0 )
-	    			 + (forwardSpeedScore );
-//	        collisionScore += (Math.abs(0.3 - child.agent.velZ) + Math.abs(0.3 - child.agent.velX)) * (child.agent.blockY <= blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).getBlockPos().getY() ? 4 : 3);
-	    } */
-//	    if (child.agent.isClimbing(world)) {
-////	    	collisionScore *= 20000;
-//	    	collisionScore += 12;
-//	    }
-	    if (world.getBlockState(child.agent.getBlockPos()).getBlock() instanceof CobwebBlock) {
-	    	collisionScore += 20000;
-	    }
-//	    if (child.agent.slimeBounce) {
-//	    	collisionScore -= 20000;
-//	    }
+            } else {
+                float forwardSpeedScore = 0.98f - Math.abs(child.agent.forwardSpeed);
+                float sidewaysSpeedScore = 0.98f - Math.abs(child.agent.sidewaysSpeed);
+                collisionScore +=
+//                              (sidewaysSpeedScore > 1e-8 || sidewaysSpeedScore < -1e-8 ? 5 : 0 )
+                                 (forwardSpeedScore > 1e-8 || forwardSpeedScore < -1e-8 ? 15 : 0 )
+                                 + (forwardSpeedScore );
+//              collisionScore += (Math.abs(0.3 - child.agent.velZ) + Math.abs(0.3 - child.agent.velX)) * (child.agent.blockY <= blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).getBlockPos().getY() ? 4 : 3);
+            } */
+//          if (child.agent.isClimbing(world)) {
+////            collisionScore *= 20000;
+//              collisionScore += 12;
+//          }
+            if (world.getBlockState(child.agent.getBlockPos()).getBlock() instanceof CobwebBlock) {
+                collisionScore += 20000;
+            }
+//          if (child.agent.slimeBounce) {
+//              collisionScore -= 20000;
+//          }
 
-	    double estimatedCostToGoal = /*computeHeuristic(childPos, child.agent.onGround, target) - 200 +*/ collisionScore;
-	    if (blockPath != null) {
-//	    		updateNextClosestBlockNodeIDX(blockPath, child, closed);
-		    	Vec3d posToGetTo = BlockPosShifter.getPosOnLadder(blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()), world);
-		    	
-		    	if (child.agent.getPos().squaredDistanceTo(target) <= 2.0D) {
-		    		posToGetTo = target;
-		    	}
-		    	
-	    	estimatedCostToGoal +=  computeHeuristic(childPos, child.agent.onGround || child.agent.slimeBounce, posToGetTo, realTarget);
-	    }
+            double estimatedCostToGoal = /*computeHeuristic(childPos, child.agent.onGround, target) - 200 +*/ collisionScore;
+            if (blockPath != null) {
+//                      updateNextClosestBlockNodeIDX(blockPath, child, closed);
+                        Vec3d posToGetTo = BlockPosShifter.getPosOnLadder(blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()), world);
+                        
+                        if (child.agent.getPos().squaredDistanceTo(target) <= 2.0D) {
+                                posToGetTo = target;
+                        }
+                        
+                estimatedCostToGoal +=  computeHeuristic(childPos, child.agent.onGround || child.agent.slimeBounce, posToGetTo, realTarget);
+            }
 
-//	    child.parent = current;
-	    child.cost = tentativeCost;
-	    child.estimatedCostToGoal = estimatedCostToGoal;
-	    child.combinedCost = tentativeCost + estimatedCostToGoal;
-	}
-	
-	private static int findClosestPositionIDX(WorldView world, BlockPos current, List<BlockNode> positions) {
+//          child.parent = current;
+            child.cost = tentativeCost;
+            child.estimatedCostToGoal = estimatedCostToGoal;
+            child.combinedCost = tentativeCost + estimatedCostToGoal;
+        }
+        
+        private static int findClosestPositionIDX(WorldView world, BlockPos current, List<BlockNode> positions) {
         if (positions == null || positions.isEmpty()) {
             throw new IllegalArgumentException("The list of positions must not be null or empty.");
         }
@@ -1349,10 +1349,10 @@ public class PathFinder {
         double minDistance = current.getSquaredDistance(closest.getPos(true, world))/* + Math.abs(closest.y - current.getY()) * 160*/;
         int maxLoop = Math.min(closestIDX+20, positions.size());
         for (int i = closestIDX+1; i < maxLoop; i++) {
-        	BlockNode position = positions.get(i);
-//			if (i % 5 != 0) {
-//        		continue;
-//        	}
+                BlockNode position = positions.get(i);
+//                      if (i % 5 != 0) {
+//                      continue;
+//              }
             double distance = current.getSquaredDistance(position.getPos(true, world))/* + Math.abs(position.y - current.getY()) * 160*/;
 //            if ( distance < 1 && closestIDX < i-1) continue;
             if (distance < minDistance/* && (heightDiff <= 0 || isCurrentNodeLadder || isClosestNodeLadder)*/) {
@@ -1361,61 +1361,61 @@ public class PathFinder {
                 closestIDX = i;
                 isClosestNodeLadder = closest.getBlockState(world).getBlock() instanceof LadderBlock;
             }
-		}
+                }
         return closestIDX;
     }
-	
-	private static boolean updateBestSoFar(Node child, Vec3d start, AtomicDoubleArray bestHeuristicSoFar) {
-		boolean failing = true;
-	    for (int i = 0; i < COEFFICIENTS.length; i++) {
-	        // h + g/C, not (h + g)/C (AStarPathFinder.java:154). The coefficient exists to
-	        // DISCOUNT the distance already travelled against the distance still to go — that is
-	        // what makes the seven of them a spread of "how much detour am I willing to accept".
-	        // Dividing the combined cost discounts both halves equally, so all seven coefficients
-	        // rank the frontier identically and only the scale changes: seven searches for the
-	        // price of seven, all of them the same search.
-	        double heuristic = child.estimatedCostToGoal + child.cost / COEFFICIENTS[i];
-	        if (bestHeuristicSoFar.get(i) - heuristic > minimumImprovement) {
-	            bestHeuristicSoFar.set(i, heuristic);
-	            bestSoFar.set(i, child);
-	            if (failing && getDistFromStartSq(child, start) > MIN_DIST_PATH * MIN_DIST_PATH) {
+        
+        private static boolean updateBestSoFar(Node child, Vec3d start, AtomicDoubleArray bestHeuristicSoFar) {
+                boolean failing = true;
+            for (int i = 0; i < COEFFICIENTS.length; i++) {
+                // h + g/C, not (h + g)/C (AStarPathFinder.java:154). The coefficient exists to
+                // DISCOUNT the distance already travelled against the distance still to go — that is
+                // what makes the seven of them a spread of "how much detour am I willing to accept".
+                // Dividing the combined cost discounts both halves equally, so all seven coefficients
+                // rank the frontier identically and only the scale changes: seven searches for the
+                // price of seven, all of them the same search.
+                double heuristic = child.estimatedCostToGoal + child.cost / COEFFICIENTS[i];
+                if (bestHeuristicSoFar.get(i) - heuristic > minimumImprovement) {
+                    bestHeuristicSoFar.set(i, heuristic);
+                    bestSoFar.set(i, child);
+                    if (failing && getDistFromStartSq(child, start) > MIN_DIST_PATH * MIN_DIST_PATH) {
                     failing = false;
                 }
-	        }
-	    }
-	    return failing;
-	}
+                }
+            }
+            return failing;
+        }
 
-	/**
-	 * How far this node has travelled from the search's start, squared — upstream is
-	 * AbstractNodeCostSearch.java:149-154, which reads startX / startY / startZ.
-	 *
-	 * <p>All three axes used to read {@code start.x}: a copied line with the letter left
-	 * unchanged, returning a number that was not a distance at all. With a start at x=100, y=64
-	 * the Y term alone contributed (100-64)^2 = 1296, so the result was enormous everywhere and
-	 * the question it answers — "have we got clear of the start yet?" — was satisfied by the
-	 * FIRST child expanded, wherever it was. Register C2.3.
-	 *
-	 * <p>Fixing this alone was measured on 2026-08-02 and reverted: nav went 12/12 -> 10/12.
-	 * That was never evidence the arithmetic was right, it was evidence that this engine's
-	 * defects mask each other — with the number honest, `failing` stays set, and the outcome
-	 * passes to the five defects that were still in place. All six land together (C5.21), which
-	 * is the only shape in which this one is meaningful.
-	 *
-	 * <p>Note for whoever reads a suite result: the value produced here reaches exactly one
-	 * consumer — the local `failing` in {@link #updateBestSoFar}, which travels up through
-	 * {@code processNodeChildren} to {@code isPathComplete(next, target, failing, world)}, and
-	 * THAT method does not read its `failing` parameter. In this engine, as it stands, this
-	 * function's result is discarded. It cannot on its own move a course either way.
-	 */
-	private static double getDistFromStartSq(Node n, Vec3d start) {
-		double xDiff = start.x - n.agent.getPos().x;
-		double yDiff = start.y - n.agent.getPos().y;
-		double zDiff = start.z - n.agent.getPos().z;
-		return xDiff * xDiff + yDiff * yDiff + zDiff * zDiff;
-	}
-	
-	private Node initializeStartNode(Node node, Vec3d target) {
+        /**
+         * How far this node has travelled from the search's start, squared — upstream is
+         * AbstractNodeCostSearch.java:149-154, which reads startX / startY / startZ.
+         *
+         * <p>All three axes used to read {@code start.x}: a copied line with the letter left
+         * unchanged, returning a number that was not a distance at all. With a start at x=100, y=64
+         * the Y term alone contributed (100-64)^2 = 1296, so the result was enormous everywhere and
+         * the question it answers — "have we got clear of the start yet?" — was satisfied by the
+         * FIRST child expanded, wherever it was. Register C2.3.
+         *
+         * <p>Fixing this alone was measured on 2026-08-02 and reverted: nav went 12/12 -> 10/12.
+         * That was never evidence the arithmetic was right, it was evidence that this engine's
+         * defects mask each other — with the number honest, `failing` stays set, and the outcome
+         * passes to the five defects that were still in place. All six land together (C5.21), which
+         * is the only shape in which this one is meaningful.
+         *
+         * <p>Note for whoever reads a suite result: the value produced here reaches exactly one
+         * consumer — the local `failing` in {@link #updateBestSoFar}, which travels up through
+         * {@code processNodeChildren} to {@code isPathComplete(next, target, failing, world)}, and
+         * THAT method does not read its `failing` parameter. In this engine, as it stands, this
+         * function's result is discarded. It cannot on its own move a course either way.
+         */
+        private static double getDistFromStartSq(Node n, Vec3d start) {
+                double xDiff = start.x - n.agent.getPos().x;
+                double yDiff = start.y - n.agent.getPos().y;
+                double zDiff = start.z - n.agent.getPos().z;
+                return xDiff * xDiff + yDiff * yDiff + zDiff * zDiff;
+        }
+        
+        private Node initializeStartNode(Node node, Vec3d target) {
         Node start = new Node(null,  Agent.of(node.agent, node.agent.input.toPathInput()), new Color(255, 255, 255), 0);
         start.agent.tick(TungstenModDataContainer.world);
         // h AND f, not just f (AStarPathFinder.java:55-56). estimatedCostToGoal was left at its
@@ -1427,18 +1427,18 @@ public class PathFinder {
         return start;
     }
 
-	
-	private Node initializeStartNode(PlayerEntity player, Vec3d target) {
+        
+        private Node initializeStartNode(PlayerEntity player, Vec3d target) {
         Node start = new Node(null, Agent.of(player), new Color(255, 255, 255), 0);
         start.estimatedCostToGoal = computeHeuristic(start.agent.getPos(), start.agent.onGround, target, TARGET);
         start.combinedCost = start.estimatedCostToGoal;
         return start;
     }
 
-	/** Create start node at a custom position (BFS endpoint).
-	 *  Copies player state (effects, dimensions, hunger) but overrides position.
-	 *  Velocity zeroed, onGround=true, yaw facing target. */
-	private Node initializeStartNodeFromPos(PlayerEntity player, Vec3d pos, Vec3d target) {
+        /** Create start node at a custom position (BFS endpoint).
+         *  Copies player state (effects, dimensions, hunger) but overrides position.
+         *  Velocity zeroed, onGround=true, yaw facing target. */
+        private Node initializeStartNodeFromPos(PlayerEntity player, Vec3d pos, Vec3d target) {
         Agent agent = Agent.of(player);
         agent.posX = pos.x;
         agent.posY = pos.y;
@@ -1679,7 +1679,7 @@ public class PathFinder {
     }
 
     private AtomicDoubleArray initializeBestHeuristics(Node start) {
-    	AtomicDoubleArray bestHeuristicSoFar = new AtomicDoubleArray(COEFFICIENTS.length);
+        AtomicDoubleArray bestHeuristicSoFar = new AtomicDoubleArray(COEFFICIENTS.length);
         for (int i = 0; i < bestHeuristicSoFar.length(); i++) {
             // Same metric updateBestSoFar uses, seeded with the start (AStarPathFinder.java:61).
             // The start's g is 0, so this is just its heuristic — but written in full, because
@@ -1802,15 +1802,15 @@ public class PathFinder {
     }
 
     private boolean isPathComplete(Node node, Vec3d target, boolean failing, WorldView world) {
-    	// NOTE: an edge-completion attempt (complete at the truncated block-path endpoint when a
-    	// break/place is pending) was tried here and REVERTED — break-safe (break_test 4/4) but it
-    	// did NOT fix the core_bridge ~50% flakiness (3/8, within noise of the 2/6 baseline). The
-    	// flakiness root is deeper in the block-space search (#1.6.1) than the physics-leg fall.
-    	// Deferred to a dedicated #1.6.1 rework; see TODOS.md.
-    	if (BlockStateChecker.isAnyWater(world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ()))))
-    		return node.agent.getPos().squaredDistanceTo(target) <= 0.9D;
-    	if (world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ())).getBlock() instanceof LadderBlock)
-    		return node.agent.getPos().squaredDistanceTo(target) <= 0.9D;
+        // NOTE: an edge-completion attempt (complete at the truncated block-path endpoint when a
+        // break/place is pending) was tried here and REVERTED — break-safe (break_test 4/4) but it
+        // did NOT fix the core_bridge ~50% flakiness (3/8, within noise of the 2/6 baseline). The
+        // flakiness root is deeper in the block-space search (#1.6.1) than the physics-leg fall.
+        // Deferred to a dedicated #1.6.1 rework; see TODOS.md.
+        if (BlockStateChecker.isAnyWater(world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ()))))
+                return node.agent.getPos().squaredDistanceTo(target) <= PathTolerances.EMIT_GATE_FLUID_SQ;
+        if (world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ())).getBlock() instanceof LadderBlock)
+                return node.agent.getPos().squaredDistanceTo(target) <= PathTolerances.EMIT_GATE_FLUID_SQ;
         // HOW CLOSE DOES THE FRONTIER ACTUALLY GET? The window is 0.2 SQUARED -- 0.45 blocks --
         // and a simulation step is 0.2-0.3 walking and about 0.4 sprinting, so arrival is a target
         // smaller than one step. This records the nearest approach so the fix is aimed at a
@@ -1830,20 +1830,20 @@ public class PathFinder {
                     target.x, target.y, target.z, dist);
         }
         goalTests++;
-        return d2 <= 0.2D;
+        return d2 <= PathTolerances.EMIT_GATE_SQ;
     }
 
     private boolean tryExecutePath(Node node, Vec3d target, double minVelocity) {
-    	TungstenModRenderContainer.TEST.clear();
-    	RenderHelper.renderPathSoFar(node);
-//    	while (TungstenModDataContainer.EXECUTOR.isRunning()) {
-//    		try {
-//				Thread.sleep(50);
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//    	}
+        TungstenModRenderContainer.TEST.clear();
+        RenderHelper.renderPathSoFar(node);
+//      while (TungstenModDataContainer.EXECUTOR.isRunning()) {
+//              try {
+//                              Thread.sleep(50);
+//                      } catch (InterruptedException e) {
+//                              // TODO Auto-generated catch block
+//                              e.printStackTrace();
+//                      }
+//      }
         // COUNT THE GATE: a route is emitted only when the simulated agent is STATIONARY at
         // the final node. A search that reaches the goal while still moving -- which is what
         // sprinting across open ground does -- is refused, and emit=0 against 1.4M expanded
@@ -1873,8 +1873,8 @@ public class PathFinder {
                 && goalTests >= MOVING_FALLBACK_AFTER_TESTS;
         if (movingFallback) tryEmitMoving++;
         if (stationary
-        		|| movingFallback || 
-        		TungstenModDataContainer.world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ())).getBlock() instanceof LadderBlock) {
+                        || movingFallback || 
+                        TungstenModDataContainer.world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ())).getBlock() instanceof LadderBlock) {
             List<Node> path = constructPath(node);
             executePath(path);
             return true;
@@ -1930,14 +1930,14 @@ public class PathFinder {
             TungstenModDataContainer.EXECUTOR.addPath(path);
             TungstenModDataContainer.EXECUTOR.blockPath = blockPath.orElse(null);   // G87: orElseGet(null) threw on an empty guide
         } else {
-        	TungstenModDataContainer.EXECUTOR.setPath(path);
+                TungstenModDataContainer.EXECUTOR.setPath(path);
             TungstenModDataContainer.EXECUTOR.blockPath = blockPath.orElse(null);   // G87: orElseGet(null) threw on an empty guide
         }
         TungstenModDataContainer.EXECUTOR.queueBreakingAfterPath(pendingBreaks);
         TungstenModDataContainer.EXECUTOR.placeQueue = pendingPlaces == null ? null : new ArrayList<>(pendingPlaces);
-		long endTime = System.currentTimeMillis();
-		long elapsedTime = endTime - startTime;
-		long minutes = (elapsedTime / 1000) / 60;
+                long endTime = System.currentTimeMillis();
+                long elapsedTime = endTime - startTime;
+                long minutes = (elapsedTime / 1000) / 60;
         long seconds = (elapsedTime / 1000) % 60;
         long milliseconds = elapsedTime % 1000;
         
@@ -1954,8 +1954,8 @@ public class PathFinder {
     }
 
     private Optional<List<BlockNode>> resetSearch(Node next, WorldView world, Optional<List<BlockNode>> blockPath, Vec3d target, PlayerEntity player) {
-    	BlockNode lastNode = blockPath.get().getLast();
-    	lastNode.previous = null;
+        BlockNode lastNode = blockPath.get().getLast();
+        lastNode.previous = null;
         blockPath = findBlockPath(world, lastNode, target, player);
         if (blockPath.isPresent()) {
             List<Node> path = constructPath(next);
@@ -1988,8 +1988,8 @@ public class PathFinder {
             }
             TungstenModDataContainer.EXECUTOR.placeQueue = pendingPlaces == null ? null : new ArrayList<>(pendingPlaces);
             NEXT_CLOSEST_BLOCKNODE_IDX.set(1);
-        	RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
-        	return blockPath;
+                RenderHelper.renderBlockPath(blockPath.get(), NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                return blockPath;
         }
         Debug.logWarning("Failed!");
         kaptainwutax.tungsten.path.PathFinder.noteStop("PathFinder@1533");
@@ -2002,18 +2002,18 @@ public class PathFinder {
         if (now < primaryTimeoutTime) return false;
         Optional<List<Node>> result = PathFinder.bestSoFar(true, 0, start, TungstenModDataContainer.PATHFINDER.TARGET);
 
-		  if (result.isEmpty() // || result.get().size() < 46
-//				  || !(result.get().getLast().agent.onGround && result.get().getLast().agent.touchingWater)
-				  || result.get().getLast().agent.isClimbing(TungstenModDataContainer.world)
-				  || result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 1.5
-		  ) {
-			  return false;
-		  }
+                  if (result.isEmpty() // || result.get().size() < 46
+//                                || !(result.get().getLast().agent.onGround && result.get().getLast().agent.touchingWater)
+                                  || result.get().getLast().agent.isClimbing(TungstenModDataContainer.world)
+                                  || result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 1.5
+                  ) {
+                          return false;
+                  }
 //        if (player.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 1 && next.agent.getPos().distanceTo(target) > 1) {
-	    if (setCurrentPath(target, start, player)) {
-	    	if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("Time ran out!");
-		    return true;
-	    }
+            if (setCurrentPath(target, start, player)) {
+                if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("Time ran out!");
+                    return true;
+            }
 //        }
         return false;
     }
@@ -2074,9 +2074,9 @@ public class PathFinder {
 
         Node newStart = null;
         if (result.get().getLast() != null) {
-        	newStart = TungstenModDataContainer.PATHFINDER.initializeStartNode(result.get().getLast(), target);
+                newStart = TungstenModDataContainer.PATHFINDER.initializeStartNode(result.get().getLast(), target);
         } else if (result.get().get(result.get().size()-2) != null) {
-        	newStart = TungstenModDataContainer.PATHFINDER.initializeStartNode(result.get().get(result.get().size()-2), target);
+                newStart = TungstenModDataContainer.PATHFINDER.initializeStartNode(result.get().get(result.get().size()-2), target);
         }
         if (newStart == null || !newStart.agent.onGround && !newStart.agent.touchingWater && !newStart.agent.isClimbing(TungstenModDataContainer.world)) return false;
         if (TungstenConfig.get().verboseDebugLogging) {
@@ -2112,8 +2112,8 @@ public class PathFinder {
         // entire search. This allows pathfinder to keep computing while executor
         // runs the partial path, appending new nodes via addPath().
         for (int i = 0; i < COEFFICIENTS.length; i++) {
-	        TungstenModDataContainer.PATHFINDER.bestSoFar.set(i, null);
-		}
+                TungstenModDataContainer.PATHFINDER.bestSoFar.set(i, null);
+                }
         TungstenModDataContainer.PATHFINDER.clearParentsForBestSoFar(newStart);
         TungstenModDataContainer.PATHFINDER.closed.clear();
         // THE RE-SEED HAS TO BE KEPT. initializeBestHeuristics BUILDS AND RETURNS a new
@@ -2133,39 +2133,39 @@ public class PathFinder {
         TungstenModDataContainer.PATHFINDER.start = newStart;
         numNodesConsidered.set(0);
 //        try {
-//			Thread.sleep(150);
-//		} catch (InterruptedException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
+//                      Thread.sleep(150);
+//              } catch (InterruptedException e) {
+//                      // TODO Auto-generated catch block
+//                      e.printStackTrace();
+//              }
 //        RenderHelper.clearRenderers();
 //        Node finalNewStart = newStart;
 //        (new Runnable() {
-//			
-//			@Override
-//			public void run() {
-//				// TODO Auto-generated method stub
-//		        TungstenModDataContainer.PATHFINDER.search(TungstenModDataContainer.world, finalNewStart, target, player);
-//				
-//			}
-//		}).run();
+//                      
+//                      @Override
+//                      public void run() {
+//                              // TODO Auto-generated method stub
+//                      TungstenModDataContainer.PATHFINDER.search(TungstenModDataContainer.world, finalNewStart, target, player);
+//                              
+//                      }
+//              }).run();
         return true;
     }
     
     private boolean filterChidren(Node child, BlockNode lastBlockNode, BlockNode nextBlockNode, boolean isSmallBlock, WorldView world) {
-    	boolean isLadder = nextBlockNode.getBlockState(world).getBlock() instanceof LadderBlock;
-    	boolean isLadderBelow = world.getBlockState(nextBlockNode.getBlockPos().down()).getBlock() instanceof LadderBlock;
-    	if (isLadder || isLadderBelow) return child.agent.getPos().getY() < (nextBlockNode.getPos(true).getY() - 3.6);
-//    	double distB = DistanceCalculator.getHorizontalEuclideanDistance(lastBlockNode.getPos(true), nextBlockNode.getPos(true));
-    	
-//    	if (distB > 6 || child.agent.isClimbing(TungstenModDataContainer.world)) return  child.agent.getPos().getY() < (nextBlockNode.getPos(true).getY() - 0.8);
-    	
-    	if (nextBlockNode.isDoingNeo())
-    		return child.agent.getBlockPos().getY() != nextBlockNode.getBlockPos().getY();
+        boolean isLadder = nextBlockNode.getBlockState(world).getBlock() instanceof LadderBlock;
+        boolean isLadderBelow = world.getBlockState(nextBlockNode.getBlockPos().down()).getBlock() instanceof LadderBlock;
+        if (isLadder || isLadderBelow) return child.agent.getPos().getY() < (nextBlockNode.getPos(true).getY() - 3.6);
+//      double distB = DistanceCalculator.getHorizontalEuclideanDistance(lastBlockNode.getPos(true), nextBlockNode.getPos(true));
+        
+//      if (distB > 6 || child.agent.isClimbing(TungstenModDataContainer.world)) return  child.agent.getPos().getY() < (nextBlockNode.getPos(true).getY() - 0.8);
+        
+        if (nextBlockNode.isDoingNeo())
+                return child.agent.getBlockPos().getY() != nextBlockNode.getBlockPos().getY();
 
-    	if (nextBlockNode.isDoingLongJump(world)) return child.agent.getBlockPos().getY() < nextBlockNode.getBlockPos().getY()-1;
+        if (nextBlockNode.isDoingLongJump(world)) return child.agent.getBlockPos().getY() < nextBlockNode.getBlockPos().getY()-1;
 
-    	if (isSmallBlock) return child.agent.getPos().getY() < (nextBlockNode.getPos(true).getY()-1);
+        if (isSmallBlock) return child.agent.getPos().getY() < (nextBlockNode.getPos(true).getY()-1);
 
 
         return shouldSkipNode(child, TARGET, world);
@@ -2202,256 +2202,256 @@ public class PathFinder {
 
     private boolean processNodeChildren(WorldView world, Node parent, Vec3d target, Vec3d start, Optional<List<BlockNode>> blockPath,
             BinaryHeapOpenSet openSet, Set<Integer> closed) {
-			boolean timing = TungstenConfig.get().debugTime;
-			long t0 = timing ? System.nanoTime() : 0;
+                        boolean timing = TungstenConfig.get().debugTime;
+                        long t0 = timing ? System.nanoTime() : 0;
 
-			AtomicBoolean failing = new AtomicBoolean(true);
-			if (blockPath.isEmpty()) return false;
-			int blockIdx = Math.min(NEXT_CLOSEST_BLOCKNODE_IDX.get(), blockPath.get().size() - 1);
-			List<Node> children = parent.getChildren(world, target, blockPath.get().get(blockIdx));
-			// SPLIT THE ZERO. children=0 at the insertion site says the frontier is never fed, but
-			// not whether the move generator produced nothing or the filter rejected everything.
-			// Two counters, one question each.
-			rawChildren += children.size();
-			if (children.isEmpty()) return false;
+                        AtomicBoolean failing = new AtomicBoolean(true);
+                        if (blockPath.isEmpty()) return false;
+                        int blockIdx = Math.min(NEXT_CLOSEST_BLOCKNODE_IDX.get(), blockPath.get().size() - 1);
+                        List<Node> children = parent.getChildren(world, target, blockPath.get().get(blockIdx));
+                        // SPLIT THE ZERO. children=0 at the insertion site says the frontier is never fed, but
+                        // not whether the move generator produced nothing or the filter rejected everything.
+                        // Two counters, one question each.
+                        rawChildren += children.size();
+                        if (children.isEmpty()) return false;
 
-			long tChildren = timing ? System.nanoTime() : 0;
-			
-//			Debug.logMessage("All children");
-//			for (Node node : children) {
-//				if (stop.get()) return false;
-//		    	if (Thread.currentThread().isInterrupted()) return false;
-//		        RenderHelper.renderNode(node);
-//			}
-//			try {
-//				Thread.sleep(500);
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-			
-			Queue<Node> validChildren = new ConcurrentLinkedQueue<>();
+                        long tChildren = timing ? System.nanoTime() : 0;
+                        
+//                      Debug.logMessage("All children");
+//                      for (Node node : children) {
+//                              if (stop.get()) return false;
+//                      if (Thread.currentThread().isInterrupted()) return false;
+//                      RenderHelper.renderNode(node);
+//                      }
+//                      try {
+//                              Thread.sleep(500);
+//                      } catch (InterruptedException e) {
+//                              // TODO Auto-generated catch block
+//                              e.printStackTrace();
+//                      }
+                        
+                        Queue<Node> validChildren = new ConcurrentLinkedQueue<>();
 
-			BlockNode lastBlockNode = blockPath.get().get(Math.max(blockIdx - 1, 0));
-			BlockNode nextBlockNode = blockPath.get().get(blockIdx);
-	        double closestBlockVolume = BlockShapeChecker.getShapeVolume(nextBlockNode.getBlockPos().down(), world);
-	        boolean isSmallBlock = closestBlockVolume > 0 && closestBlockVolume < 1;
-			
-			List<Callable<Void>> tasks = new ArrayList<>();
-			
-			// Both branches evaluate a child IDENTICALLY; they used to be two copies of the
-			// same block, and the copies had drifted into a serious bug. In the chunked
-			// branch the body ran inside `for (j : nodes)`, but every rejection path was
-			// `return null` — which exits the whole Callable, so the FIRST rejected child
-			// silently discarded every remaining child in its chunk. With ~192 candidates
-			// per expansion and a near-duplicate test that rejects early and often, the
-			// physics search was exploring a small, arbitrary subset of its own move space,
-			// and WHICH subset depended on ForkJoin scheduling order — so the search was
-			// non-deterministic on top of being crippled. One shared method now, so the two
-			// paths cannot drift again. (Audit 2026-07-27, C2.4.)
-			if (children.size() > 5) {
-				Node[][] chunks = ArrayChunkSplitter.splitArrayIntoChunksOfX(children.toArray(new Node[children.size()]), children.size()/5);
+                        BlockNode lastBlockNode = blockPath.get().get(Math.max(blockIdx - 1, 0));
+                        BlockNode nextBlockNode = blockPath.get().get(blockIdx);
+                double closestBlockVolume = BlockShapeChecker.getShapeVolume(nextBlockNode.getBlockPos().down(), world);
+                boolean isSmallBlock = closestBlockVolume > 0 && closestBlockVolume < 1;
+                        
+                        List<Callable<Void>> tasks = new ArrayList<>();
+                        
+                        // Both branches evaluate a child IDENTICALLY; they used to be two copies of the
+                        // same block, and the copies had drifted into a serious bug. In the chunked
+                        // branch the body ran inside `for (j : nodes)`, but every rejection path was
+                        // `return null` — which exits the whole Callable, so the FIRST rejected child
+                        // silently discarded every remaining child in its chunk. With ~192 candidates
+                        // per expansion and a near-duplicate test that rejects early and often, the
+                        // physics search was exploring a small, arbitrary subset of its own move space,
+                        // and WHICH subset depended on ForkJoin scheduling order — so the search was
+                        // non-deterministic on top of being crippled. One shared method now, so the two
+                        // paths cannot drift again. (Audit 2026-07-27, C2.4.)
+                        if (children.size() > 5) {
+                                Node[][] chunks = ArrayChunkSplitter.splitArrayIntoChunksOfX(children.toArray(new Node[children.size()]), children.size()/5);
 
-				for (int i = 0; i < chunks.length; i++) {
-					Node[] nodes = chunks[i];
-					tasks.add(() -> {
-						for (Node child : nodes) {
-							if (stop.get()) return null;
-							if (Thread.currentThread().isInterrupted()) return null;
-							acceptChildIfValid(child, lastBlockNode, nextBlockNode, isSmallBlock,
-									world, validChildren);
-						}
-						return null;
-					});
-				}
+                                for (int i = 0; i < chunks.length; i++) {
+                                        Node[] nodes = chunks[i];
+                                        tasks.add(() -> {
+                                                for (Node child : nodes) {
+                                                        if (stop.get()) return null;
+                                                        if (Thread.currentThread().isInterrupted()) return null;
+                                                        acceptChildIfValid(child, lastBlockNode, nextBlockNode, isSmallBlock,
+                                                                        world, validChildren);
+                                                }
+                                                return null;
+                                        });
+                                }
 
-			} else {
-				tasks = children.stream().map(child -> (Callable<Void>) () -> {
-					if (stop.get()) return null;
-					if (Thread.currentThread().isInterrupted()) return null;
-					acceptChildIfValid(child, lastBlockNode, nextBlockNode, isSmallBlock,
-							world, validChildren);
-					return null;
-				}).collect(Collectors.toList());
-			}
-			
-//			for (Iterator iterator = tasks.iterator(); iterator.hasNext();) {
-//				Callable<Void> callable = (Callable<Void>) iterator.next();
-//				try {
-//					callable.call();
-//				} catch (Exception e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//			}
-			
-			try {
-				List<Future<Void>> futures = executor.invokeAll(tasks);
-				
-				for (Future<Void> future : futures) {
-					if (!future.isDone()) {
-						Thread.sleep(50);
-					}
-				}
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+                        } else {
+                                tasks = children.stream().map(child -> (Callable<Void>) () -> {
+                                        if (stop.get()) return null;
+                                        if (Thread.currentThread().isInterrupted()) return null;
+                                        acceptChildIfValid(child, lastBlockNode, nextBlockNode, isSmallBlock,
+                                                        world, validChildren);
+                                        return null;
+                                }).collect(Collectors.toList());
+                        }
+                        
+//                      for (Iterator iterator = tasks.iterator(); iterator.hasNext();) {
+//                              Callable<Void> callable = (Callable<Void>) iterator.next();
+//                              try {
+//                                      callable.call();
+//                              } catch (Exception e) {
+//                                      // TODO Auto-generated catch block
+//                                      e.printStackTrace();
+//                              }
+//                      }
+                        
+                        try {
+                                List<Future<Void>> futures = executor.invokeAll(tasks);
+                                
+                                for (Future<Void> future : futures) {
+                                        if (!future.isDone()) {
+                                                Thread.sleep(50);
+                                        }
+                                }
+                        } catch (InterruptedException e) {
+                                e.printStackTrace();
+                        }
 
-			validAfterFilter += validChildren.size();
-			long tFiltered = timing ? System.nanoTime() : 0;
+                        validAfterFilter += validChildren.size();
+                        long tFiltered = timing ? System.nanoTime() : 0;
 
-			Object openSetLock = new Object();  // if openSet is not thread-safe
-			
-			List<Callable<Void>> processingTasks = new ArrayList<>();
-					
-			if (validChildren.size() > 25) {
-				Node[][] chunks = ArrayChunkSplitter.splitArrayIntoChunksOfX(validChildren.toArray(new Node[validChildren.size()]), children.size()/25);
+                        Object openSetLock = new Object();  // if openSet is not thread-safe
+                        
+                        List<Callable<Void>> processingTasks = new ArrayList<>();
+                                        
+                        if (validChildren.size() > 25) {
+                                Node[][] chunks = ArrayChunkSplitter.splitArrayIntoChunksOfX(validChildren.toArray(new Node[validChildren.size()]), children.size()/25);
 
-				for (int i = 0; i < chunks.length; i++) {
-					Node[] nodes = chunks[i];
-					processingTasks.add(() -> {
-						for (int j = 0; j < nodes.length; j++) {
-							Node child = nodes[j];
-							if (stop.get()) return null;
-					    	if (Thread.currentThread().isInterrupted()) return null;
-					        updateNode(world, parent, child, target, TARGET, blockPath.get(), closed);
-		
-					        synchronized (openSetLock) {
-					            expandedChildren++;
-					            if (child.isOpen()) {
-					                openSet.update(child);
-					            } else {
-					                openSet.insert(child);
-					            }
-					        }
+                                for (int i = 0; i < chunks.length; i++) {
+                                        Node[] nodes = chunks[i];
+                                        processingTasks.add(() -> {
+                                                for (int j = 0; j < nodes.length; j++) {
+                                                        Node child = nodes[j];
+                                                        if (stop.get()) return null;
+                                                if (Thread.currentThread().isInterrupted()) return null;
+                                                updateNode(world, parent, child, target, TARGET, blockPath.get(), closed);
+                
+                                                synchronized (openSetLock) {
+                                                    expandedChildren++;
+                                                    if (child.isOpen()) {
+                                                        openSet.update(child);
+                                                    } else {
+                                                        openSet.insert(child);
+                                                    }
+                                                }
 
-					        // Update best heuristic safely
-					        synchronized (bestHeuristicSoFar) {
-					            if (!updateBestSoFar(child, start, bestHeuristicSoFar)) {
-					                failing.set(false);
-					            }
-					        }
-						}
-						return null;
-					});
-				}
-				
-			} else {
-		
-				processingTasks = validChildren.stream()
-				    .map(child -> (Callable<Void>) () -> {
-						if (stop.get()) return null;
-				    	if (Thread.currentThread().isInterrupted()) return null;
-				        updateNode(world, parent, child, target, TARGET, blockPath.get(), closed);
-	
-				        synchronized (openSetLock) {
-				            expandedChildren++;   // the branch that ACTUALLY runs: <=25 valid children
-				            if (child.isOpen()) {
-				                openSet.update(child);
-				            } else {
-				                openSet.insert(child);
-				            }
-				        }
-	
-				        // Update best heuristic safely
-				        synchronized (bestHeuristicSoFar) {
-				            if (!updateBestSoFar(child, start, bestHeuristicSoFar)) {
-				                failing.set(false);
-				            }
-				        }
-	
-				        // Optional: render node for debugging
-//				         RenderHelper.renderNode(child);
-	
-				        return null;
-				    })
-				    .collect(Collectors.toList());
+                                                // Update best heuristic safely
+                                                synchronized (bestHeuristicSoFar) {
+                                                    if (!updateBestSoFar(child, start, bestHeuristicSoFar)) {
+                                                        failing.set(false);
+                                                    }
+                                                }
+                                                }
+                                                return null;
+                                        });
+                                }
+                                
+                        } else {
+                
+                                processingTasks = validChildren.stream()
+                                    .map(child -> (Callable<Void>) () -> {
+                                                if (stop.get()) return null;
+                                        if (Thread.currentThread().isInterrupted()) return null;
+                                        updateNode(world, parent, child, target, TARGET, blockPath.get(), closed);
+        
+                                        synchronized (openSetLock) {
+                                            expandedChildren++;   // the branch that ACTUALLY runs: <=25 valid children
+                                            if (child.isOpen()) {
+                                                openSet.update(child);
+                                            } else {
+                                                openSet.insert(child);
+                                            }
+                                        }
+        
+                                        // Update best heuristic safely
+                                        synchronized (bestHeuristicSoFar) {
+                                            if (!updateBestSoFar(child, start, bestHeuristicSoFar)) {
+                                                failing.set(false);
+                                            }
+                                        }
+        
+                                        // Optional: render node for debugging
+//                                       RenderHelper.renderNode(child);
+        
+                                        return null;
+                                    })
+                                    .collect(Collectors.toList());
 
-			}
+                        }
 
-//			for (Iterator iterator = processingTasks.iterator(); iterator.hasNext();) {
-//				Callable<Void> callable = (Callable<Void>) iterator.next();
-//				try {
-//					callable.call();
-//				} catch (Exception e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//			}
-			
-		    try {
-				List<Future<Void>> futures = executor.invokeAll(processingTasks);
-				
-				for (Future<Void> future : futures) {
-					if (!future.isDone()) {
-						Thread.sleep(50);
-					}
-				}
-				
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-				
-//			for (Node child : validChildren) {
-//				updateNode(world, parent, child, target, blockPath.get(), closed);
-//				
-//				if (child.isOpen()) {
-//					openSet.update(child);
-//				} else {
-//					openSet.insert(child);
-//				}
-//				
-//				// Update best so far
-//				if (updateBestSoFar(child, bestHeuristicSoFar, target)) {
-//					failing.set(false);
-//				}
-//				
-//				// Optionally render or handle visual updates here
-//				// RenderHelper.renderNode(child);
-//			}
-		    
-//		    RenderHelper.clearRenderers();
+//                      for (Iterator iterator = processingTasks.iterator(); iterator.hasNext();) {
+//                              Callable<Void> callable = (Callable<Void>) iterator.next();
+//                              try {
+//                                      callable.call();
+//                              } catch (Exception e) {
+//                                      // TODO Auto-generated catch block
+//                                      e.printStackTrace();
+//                              }
+//                      }
+                        
+                    try {
+                                List<Future<Void>> futures = executor.invokeAll(processingTasks);
+                                
+                                for (Future<Void> future : futures) {
+                                        if (!future.isDone()) {
+                                                Thread.sleep(50);
+                                        }
+                                }
+                                
+                        } catch (InterruptedException e) {
+                                // TODO Auto-generated catch block
+                                e.printStackTrace();
+                        }
+                                
+//                      for (Node child : validChildren) {
+//                              updateNode(world, parent, child, target, blockPath.get(), closed);
+//                              
+//                              if (child.isOpen()) {
+//                                      openSet.update(child);
+//                              } else {
+//                                      openSet.insert(child);
+//                              }
+//                              
+//                              // Update best so far
+//                              if (updateBestSoFar(child, bestHeuristicSoFar, target)) {
+//                                      failing.set(false);
+//                              }
+//                              
+//                              // Optionally render or handle visual updates here
+//                              // RenderHelper.renderNode(child);
+//                      }
+                    
+//                  RenderHelper.clearRenderers();
 //
-//			Debug.logMessage("Valid children");
-//			for (Node node : validChildren) {
-//				if (stop.get()) return false;
-//		    	if (Thread.currentThread().isInterrupted()) return false;
-//		        RenderHelper.renderNode(node);
-//			}
-//			try {
-//				Thread.sleep(20);
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-			if (timing) {
-				long tDone = System.nanoTime();
-				double msGetChildren = (tChildren - t0) / 1_000_000.0;
-				double msFilter = (tFiltered - tChildren) / 1_000_000.0;
-				double msOpenSet = (tDone - tFiltered) / 1_000_000.0;
-				double msTotal = (tDone - t0) / 1_000_000.0;
-				System.out.printf("Tungsten [node#%d] %.1fms total | getChildren=%.1fms (%d raw) | filter=%.1fms (%d valid) | openSet+update=%.1fms%n",
-					numNodesConsidered.get(), msTotal, msGetChildren, children.size(), msFilter, validChildren.size(), msOpenSet);
-			}
+//                      Debug.logMessage("Valid children");
+//                      for (Node node : validChildren) {
+//                              if (stop.get()) return false;
+//                      if (Thread.currentThread().isInterrupted()) return false;
+//                      RenderHelper.renderNode(node);
+//                      }
+//                      try {
+//                              Thread.sleep(20);
+//                      } catch (InterruptedException e) {
+//                              // TODO Auto-generated catch block
+//                              e.printStackTrace();
+//                      }
+                        if (timing) {
+                                long tDone = System.nanoTime();
+                                double msGetChildren = (tChildren - t0) / 1_000_000.0;
+                                double msFilter = (tFiltered - tChildren) / 1_000_000.0;
+                                double msOpenSet = (tDone - tFiltered) / 1_000_000.0;
+                                double msTotal = (tDone - t0) / 1_000_000.0;
+                                System.out.printf("Tungsten [node#%d] %.1fms total | getChildren=%.1fms (%d raw) | filter=%.1fms (%d valid) | openSet+update=%.1fms%n",
+                                        numNodesConsidered.get(), msTotal, msGetChildren, children.size(), msFilter, validChildren.size(), msOpenSet);
+                        }
 
-			return failing.get();
-		}
+                        return failing.get();
+                }
     
     private boolean updateNextClosestBlockNodeIDX(List<BlockNode> blockPath, Node node, Set<Integer> closed, WorldView world) {
-    	if (blockPath == null) return false;
+        if (blockPath == null) return false;
 
-    	if (NEXT_CLOSEST_BLOCKNODE_IDX.get()+1 >= blockPath.size()) return false;
-    	BlockNode lastClosestPos = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()-1);
-    	BlockNode closestPos = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get());
-    	BlockNode nextNodePos = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()+1);
-    	
-    	boolean isRunningLongDist = lastClosestPos.getPos(true).distanceTo(closestPos.getPos(true)) > 7;
+        if (NEXT_CLOSEST_BLOCKNODE_IDX.get()+1 >= blockPath.size()) return false;
+        BlockNode lastClosestPos = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()-1);
+        BlockNode closestPos = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get());
+        BlockNode nextNodePos = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()+1);
+        
+        boolean isRunningLongDist = lastClosestPos.getPos(true).distanceTo(closestPos.getPos(true)) > 7;
 
-    	Vec3d nodePos = node.agent.getPos();
-    	if (!node.agent.onGround && !node.agent.touchingWater && !node.agent.isClimbing(world)) return false;
-    	BlockPos nodeBlockPos = new BlockPos(node.agent.blockX, node.agent.blockY, node.agent.blockZ);
-    	int closestPosIDX = findClosestPositionIDX(world, nodeBlockPos, blockPath);
+        Vec3d nodePos = node.agent.getPos();
+        if (!node.agent.onGround && !node.agent.touchingWater && !node.agent.isClimbing(world)) return false;
+        BlockPos nodeBlockPos = new BlockPos(node.agent.blockX, node.agent.blockY, node.agent.blockZ);
+        int closestPosIDX = findClosestPositionIDX(world, nodeBlockPos, blockPath);
         BlockState state = world.getBlockState(closestPos.getBlockPos());
         BlockState stateBelow = world.getBlockState(closestPos.getBlockPos().down());
         double closestBlockBelowHeight = BlockShapeChecker.getBlockHeight(closestPos.getBlockPos().down(), world);
@@ -2472,16 +2472,16 @@ public class PathFinder {
         
 
 
-    	if (!isLadder && !isCarpet) {
-	    	if (closestPos.getPos(true).y - nodePos.y > 0.6 || !nodePos.isWithinRangeOf(closestPos.getPos(true), (isRunningLongDist ? 2.80 : 1.95), (isRunningLongDist ? 1.20 : 1.20)))  {
-	    		return false;
-	    	}
-	    	
-	    	Node p = node.parent;
-	    	for (int i = 0; i < 4; i++) {
-	    		if (p != null && closestPos.getPos(true).y <= p.agent.getPos().y &&  !p.agent.getPos().isWithinRangeOf(closestPos.getPos(true), (isRunningLongDist ? 2.80 : 1.95), (isRunningLongDist ? 1.20 : 1.80))) return false;
-			}
-    	}
+        if (!isLadder && !isCarpet) {
+                if (closestPos.getPos(true).y - nodePos.y > 0.6 || !nodePos.isWithinRangeOf(closestPos.getPos(true), (isRunningLongDist ? 2.80 : 1.95), (isRunningLongDist ? 1.20 : 1.20)))  {
+                        return false;
+                }
+                
+                Node p = node.parent;
+                for (int i = 0; i < 4; i++) {
+                        if (p != null && closestPos.getPos(true).y <= p.agent.getPos().y &&  !p.agent.getPos().isWithinRangeOf(closestPos.getPos(true), (isRunningLongDist ? 2.80 : 1.95), (isRunningLongDist ? 1.20 : 1.80))) return false;
+                        }
+        }
         
         boolean validWaterProximity = isWater && nodePos.isWithinRangeOf(BlockPosShifter.getPosOnLadder(closestPos, world), 0.9, 1.2);
         // Agent state conditions
@@ -2506,10 +2506,10 @@ public class PathFinder {
         boolean validStandardProximity = !isLadder && !isBelowLadder && !isBelowGlassPane 
             && !isBlockBelowTall
             && (isBlockAboveSolid
-        	&&	distanceToClosestPos < (isRunningLongDist ? 1.80 : 0.85)
+                &&      distanceToClosestPos < (isRunningLongDist ? 1.80 : 0.85)
             || !isBlockAboveSolid
             && (
-            		distanceToClosestPos < (isRunningLongDist ? 1.80 : 1.25)
+                        distanceToClosestPos < (isRunningLongDist ? 1.80 : 1.25)
             && heightDiff < 1.8
             && heightDiff > 1
             || 
@@ -2529,67 +2529,67 @@ public class PathFinder {
         boolean validSmallBlockProximity = !isBelowGlassPane && closestBlockVolume > 0 && closestBlockVolume < 1 && distanceToClosestPos < 0.7;
         
 //        for (int j = 0; j < blockPath.size(); j++) {
-//			if (j >= closestPosIDX) {
-//	        	RenderHelper.renderBlockPath(blockPath, j);
-//				try {
-//					Thread.sleep(200);
-//				} catch (InterruptedException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//			}
-//		}
+//                      if (j >= closestPosIDX) {
+//                      RenderHelper.renderBlockPath(blockPath, j);
+//                              try {
+//                                      Thread.sleep(200);
+//                              } catch (InterruptedException e) {
+//                                      // TODO Auto-generated catch block
+//                                      e.printStackTrace();
+//                              }
+//                      }
+//              }
         
         if (validLadderProximity) {
-        	if (setCurrentPath(TARGET, this.start, TungstenModDataContainer.player)) {
-				NEXT_CLOSEST_BLOCKNODE_IDX.set(closestPosIDX+1);
-	        	RenderHelper.renderBlockPath(blockPath, NEXT_CLOSEST_BLOCKNODE_IDX.get());
-				return true;
-			}
+                if (setCurrentPath(TARGET, this.start, TungstenModDataContainer.player)) {
+                                NEXT_CLOSEST_BLOCKNODE_IDX.set(closestPosIDX+1);
+                        RenderHelper.renderBlockPath(blockPath, NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                                return true;
+                        }
         } else if (closestPosIDX+1 > NEXT_CLOSEST_BLOCKNODE_IDX.get()+1 && heightDiff <= 1) {
 
-//			if (setCurrentPath(TARGET, this.start, TungstenModDataContainer.player)) {
-				NEXT_CLOSEST_BLOCKNODE_IDX.set(closestPosIDX+1);
-	        	RenderHelper.renderBlockPath(blockPath, NEXT_CLOSEST_BLOCKNODE_IDX.get());
-				closed.clear();
-				return true;
-//			}
+//                      if (setCurrentPath(TARGET, this.start, TungstenModDataContainer.player)) {
+                                NEXT_CLOSEST_BLOCKNODE_IDX.set(closestPosIDX+1);
+                        RenderHelper.renderBlockPath(blockPath, NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                                closed.clear();
+                                return true;
+//                      }
         }
-    	if (closestPosIDX+1 > NEXT_CLOSEST_BLOCKNODE_IDX.get() && closestPosIDX +1 < blockPath.size()
-    			&&  heightDiff <= 1
-    			&& ( validWaterProximity || !isConnected
-//    			&& BlockNode.wasCleared(world, nodeBlockPos, blockPath.get(closestPosIDX+1).getBlockPos())
-				&& agentOnGroundOrClimbingOrOnTallBlock
-    			&& (
-	    			validTallBlockProximity
-		    		|| validStandardProximity
-		    		|| validGlassPaneProximity
-		    		|| validSmallBlockProximity
-		    		|| validBottomSlabProximity
-		    		|| validClosedTrapDoorProximity
-	    		)
-//			    && (child.agent.getBlockPos().getY() == blockPath.get(closestPosIDX).getBlockPos().getY())
-    			)
-    			) {
+        if (closestPosIDX+1 > NEXT_CLOSEST_BLOCKNODE_IDX.get() && closestPosIDX +1 < blockPath.size()
+                        &&  heightDiff <= 1
+                        && ( validWaterProximity || !isConnected
+//                      && BlockNode.wasCleared(world, nodeBlockPos, blockPath.get(closestPosIDX+1).getBlockPos())
+                                && agentOnGroundOrClimbingOrOnTallBlock
+                        && (
+                                validTallBlockProximity
+                                || validStandardProximity
+                                || validGlassPaneProximity
+                                || validSmallBlockProximity
+                                || validBottomSlabProximity
+                                || validClosedTrapDoorProximity
+                        )
+//                          && (child.agent.getBlockPos().getY() == blockPath.get(closestPosIDX).getBlockPos().getY())
+                        )
+                        ) {
 
                 boolean isNeo = blockPath.get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).isDoingNeo();
 
-    			if (!isNeo || setCurrentPath(TARGET, this.start, TungstenModDataContainer.player)) {
-    				NEXT_CLOSEST_BLOCKNODE_IDX.set(closestPosIDX+1);
-    	        	RenderHelper.renderBlockPath(blockPath, NEXT_CLOSEST_BLOCKNODE_IDX.get());
-    				closed.clear();
-    				return true;
-    			}
-//	    		try {
-//					Thread.sleep(150);
-//				} catch (InterruptedException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-    	}
-    	return false;
+                        if (!isNeo || setCurrentPath(TARGET, this.start, TungstenModDataContainer.player)) {
+                                NEXT_CLOSEST_BLOCKNODE_IDX.set(closestPosIDX+1);
+                        RenderHelper.renderBlockPath(blockPath, NEXT_CLOSEST_BLOCKNODE_IDX.get());
+                                closed.clear();
+                                return true;
+                        }
+//                      try {
+//                                      Thread.sleep(150);
+//                              } catch (InterruptedException e) {
+//                                      // TODO Auto-generated catch block
+//                                      e.printStackTrace();
+//                              }
+        }
+        return false;
     }
-	
+        
     /** Wall shortcuts refused because every planned break was already air. */
     public static volatile int wallSkipRefused;
 }

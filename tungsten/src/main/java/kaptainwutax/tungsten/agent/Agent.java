@@ -183,7 +183,7 @@ public class Agent {
     }
     
     public BlockState getBlockState(WorldView world) {
-    	return world.getBlockState(getBlockPos());
+        return world.getBlockState(getBlockPos());
     }
 
     public void setPos(double x, double y, double z) {
@@ -193,16 +193,16 @@ public class Agent {
         this.blockX = MathHelper.floor(x);
         this.blockY = MathHelper.floor(y);
         this.blockZ = MathHelper.floor(z);
-//		this.setBoundingBox(this.calculateBoundingBox());
+//              this.setBoundingBox(this.calculateBoundingBox());
     }
     
     public final void setBoundingBox(Box boundingBox) {
-		this.box = boundingBox;
-	}
+                this.box = boundingBox;
+        }
     
     protected Box calculateBoundingBox() {
-		return this.dimensions.getBoxAt(this.getPos());
-	}
+                return this.dimensions.getBoxAt(this.getPos());
+        }
 
     /** Shallow copy of this agent's state — enough for MPC forward simulation. */
     public Agent copy() {
@@ -422,14 +422,14 @@ public class Agent {
         if(this.ticksToNextAutojump > 0) {
             --this.ticksToNextAutojump;
             this.input.playerInput = new TungstenPlayerInput(
-            		this.input.playerInput.forward(),
-            		this.input.playerInput.backward(),
-            		this.input.playerInput.left(),
-            		this.input.playerInput.right(),
-        			true,
-        			this.input.playerInput.sneak(),
-        			this.input.playerInput.sprint()
-        		);
+                        this.input.playerInput.forward(),
+                        this.input.playerInput.backward(),
+                        this.input.playerInput.left(),
+                        this.input.playerInput.right(),
+                                true,
+                                this.input.playerInput.sneak(),
+                                this.input.playerInput.sprint()
+                        );
         }
 
         double width = this.dimensions.width();
@@ -441,12 +441,12 @@ public class Agent {
 
         if(this.sprinting) {
             if(this.swimming) {
-            	if (this.shouldStopSwimSprinting()) {
-					this.setSprinting(false);
-				}
+                if (this.shouldStopSwimSprinting()) {
+                                        this.setSprinting(false);
+                                }
             } else if (this.shouldStopSprinting()) {
-				this.setSprinting(false);
-			}
+                                this.setSprinting(false);
+                        }
         }
         
         if(this.canStartSprinting()) {
@@ -478,8 +478,8 @@ public class Agent {
         }
         
         Vec2f vec2f = this.applyMovementSpeedFactors(this.input.getMovementInput());
-		this.sidewaysSpeed = vec2f.x;
-		this.forwardSpeed = vec2f.y;
+                this.sidewaysSpeed = vec2f.x;
+                this.forwardSpeed = vec2f.y;
         this.jumping = this.input.playerInput.jump();
 
         
@@ -578,7 +578,7 @@ public class Agent {
 
         sideways *= speed; upward *= speed; forward *= speed;
         float f = MathHelper.sin(yaw * (float) (Math.PI / 180.0));
-		float g = MathHelper.cos(yaw * (float) (Math.PI / 180.0));
+                float g = MathHelper.cos(yaw * (float) (Math.PI / 180.0));
 
         this.velX += sideways * (double)g - forward * (double)f;
         this.velY += upward;
@@ -743,7 +743,7 @@ public class Agent {
     private float getMovementSpeed(float slipperiness) {
         if(this.onGround) {
             return this.movementSpeed * (0.21600002F / (slipperiness * slipperiness * slipperiness));
-        }	
+        }       
 
         return this.sprinting ? 0.025999999F : 0.02F;
     }
@@ -811,7 +811,7 @@ public class Agent {
 
         double magnitudeSq = ajuX * ajuX + ajuY * ajuY + ajuZ * ajuZ;
 
-		if(magnitudeSq > 0.0000001D) {
+                if(magnitudeSq > 0.0000001D) {
             if(this.fallDistance != 0.0F && magnitudeSq >= 1.0D) {
                 RaycastContext context = new AgentRaycastContext(this.getPos(), this.getPos().add(new Vec3d(ajuX, ajuY, ajuZ)),
                     RaycastContext.ShapeType.FALLDAMAGE_RESETTING, RaycastContext.FluidHandling.WATER, this);
@@ -823,7 +823,7 @@ public class Agent {
             }
 
             this.setPos(this.posX + ajuX, this.posY + ajuY, this.posZ + ajuZ);
-			this.box = this.dimensions.getBoxAt(this.posX, this.posY, this.posZ);
+                        this.box = this.dimensions.getBoxAt(this.posX, this.posY, this.posZ);
         }
 
         boolean xSimilar = !MathHelper.approximatelyEquals(movX, ajuX);
@@ -848,8 +848,8 @@ public class Agent {
         if(movY != ajuY) {
             if(block instanceof SlimeBlock && !this.input.playerInput.sneak()) {
                 if(this.velY < 0.0D) {
-                	this.velY *= -1;
-                	this.slimeBounce = true;
+                        this.velY *= -1;
+                        this.slimeBounce = true;
                 }
             } else if(block instanceof BedBlock) {
                 if(this.velY < 0.0D) this.velY *= -1 * (double)0.66F;
@@ -869,7 +869,7 @@ public class Agent {
                 if(d < 0.1D) {
                     this.velX *= 0.4D + d * 0.2D;
                     this.velZ *= 0.4D + d * 0.2D;
-                	this.slimeBounce = true;
+                        this.slimeBounce = true;
                 }
             } else if(block instanceof TurtleEggBlock) {
                 //eggs can break (1/100)
@@ -881,11 +881,11 @@ public class Agent {
         float i = this.getVelocityMultiplier(world);
         this.velX *= i; this.velZ *= i;
 
-		/*
-		if (this.world.method_29556(this.getBoundingBox().contract(0.001))
-		.noneMatch(blockState -> blockState.isIn(BlockTags.FIRE) || blockState.isOf(Blocks.LAVA)) && this.fireTicks <= 0) {
-			this.setFireTicks(-this.getBurningDuration());
-		}*/
+                /*
+                if (this.world.method_29556(this.getBoundingBox().contract(0.001))
+                .noneMatch(blockState -> blockState.isIn(BlockTags.FIRE) || blockState.isOf(Blocks.LAVA)) && this.fireTicks <= 0) {
+                        this.setFireTicks(-this.getBurningDuration());
+                }*/
     }
 
     private boolean hasCollidedSoftly(double ajuX, double ajuY, double ajuZ) {
@@ -947,7 +947,7 @@ public class Agent {
         boolean bl = movement.x != vec3d.x;
         boolean bl2 = movement.y != vec3d.y;
         boolean bl3 = movement.z != vec3d.z;
-		boolean bl4 = bl2 && movement.y < 0.0;
+                boolean bl4 = bl2 && movement.y < 0.0;
         boolean bl5 = this.onGround || bl4;
 
         if(this.stepHeight > 0.0f && bl5 && (bl || bl3)) {
@@ -962,59 +962,59 @@ public class Agent {
 //            if(vec3d2.horizontalLengthSquared() > vec3d.horizontalLengthSquared()) {
 //                return vec3d2.add(this.adjustMovementForCollisions(new Vec3d(0.0, -vec3d2.y + movement.y, 0.0), box.offset(vec3d2), world, list));
 //            }
-        	Box box2 = bl4 ? box.offset(0.0, vec3d.y, 0.0) : box;
-			Box box3 = box2.stretch(movement.x, (double)this.stepHeight, movement.z);
-			if (!bl4) {
-				box3 = box3.stretch(0.0, -1.0E-5F, 0.0);
-			}
+                Box box2 = bl4 ? box.offset(0.0, vec3d.y, 0.0) : box;
+                        Box box3 = box2.stretch(movement.x, (double)this.stepHeight, movement.z);
+                        if (!bl4) {
+                                box3 = box3.stretch(0.0, -1.0E-5F, 0.0);
+                        }
 
-			List<VoxelShape> list2 = this.findCollisionsForMovement(world, list, box3);
-			float f = (float)vec3d.y;
-			float[] fs = collectStepHeights(box2, list2, this.stepHeight, f);
+                        List<VoxelShape> list2 = this.findCollisionsForMovement(world, list, box3);
+                        float f = (float)vec3d.y;
+                        float[] fs = collectStepHeights(box2, list2, this.stepHeight, f);
 
-			for (float g : fs) {
-				Vec3d vec3d2 = adjustMovementForCollisions(new Vec3d(movement.x, (double)g, movement.z), box2, list2);
-				if (vec3d2.horizontalLengthSquared() > vec3d.horizontalLengthSquared()) {
-					double d = box.minY - box2.minY;
-					return vec3d2.add(0.0, -d, 0.0);
-				}
-			}
+                        for (float g : fs) {
+                                Vec3d vec3d2 = adjustMovementForCollisions(new Vec3d(movement.x, (double)g, movement.z), box2, list2);
+                                if (vec3d2.horizontalLengthSquared() > vec3d.horizontalLengthSquared()) {
+                                        double d = box.minY - box2.minY;
+                                        return vec3d2.add(0.0, -d, 0.0);
+                                }
+                        }
         }
 
         return vec3d;
     }
     
     private List<VoxelShape> findCollisionsForMovement(WorldView world, List<VoxelShape> regularCollisions, Box movingEntityBoundingBox
-    	) {
-    		Builder<VoxelShape> builder = ImmutableList.builderWithExpectedSize(regularCollisions.size() + 1);
-    		if (!regularCollisions.isEmpty()) {
-    			builder.addAll(regularCollisions);
-    		}
+        ) {
+                Builder<VoxelShape> builder = ImmutableList.builderWithExpectedSize(regularCollisions.size() + 1);
+                if (!regularCollisions.isEmpty()) {
+                        builder.addAll(regularCollisions);
+                }
 
-    		builder.addAll(this.getBlockCollisions(world, movingEntityBoundingBox));
-    		return builder.build();
-    	}
+                builder.addAll(this.getBlockCollisions(world, movingEntityBoundingBox));
+                return builder.build();
+        }
     
     private static float[] collectStepHeights(Box collisionBox, List<VoxelShape> collisions, float f, float stepHeight) {
-		FloatSet floatSet = new FloatArraySet(4);
+                FloatSet floatSet = new FloatArraySet(4);
 
-		for (VoxelShape voxelShape : collisions) {
-			for (double d : voxelShape.getPointPositions(Axis.Y)) {
-				float g = (float)(d - collisionBox.minY);
-				if (!(g < 0.0F) && g != stepHeight) {
-					if (g > f) {
-						break;
-					}
+                for (VoxelShape voxelShape : collisions) {
+                        for (double d : voxelShape.getPointPositions(Axis.Y)) {
+                                float g = (float)(d - collisionBox.minY);
+                                if (!(g < 0.0F) && g != stepHeight) {
+                                        if (g > f) {
+                                                break;
+                                        }
 
-					floatSet.add(g);
-				}
-			}
-		}
+                                        floatSet.add(g);
+                                }
+                        }
+                }
 
-		float[] fs = floatSet.toFloatArray();
-		FloatArrays.unstableSort(fs);
-		return fs;
-	}
+                float[] fs = floatSet.toFloatArray();
+                FloatArrays.unstableSort(fs);
+                return fs;
+        }
 
     public Vec3d adjustMovementForCollisions(Vec3d movement, Box entityBoundingBox, WorldView world, List<VoxelShape> entityCollisions) {
         ImmutableList.Builder<VoxelShape> builder = ImmutableList.builderWithExpectedSize(entityCollisions.size() + 1);
@@ -1213,9 +1213,9 @@ public class Agent {
 
         if(i > 0) {
             //this.damage(DamageSource.FALL, i);
-        	this.isDamaged = true; 
-        	this.velX = 0;
-        	this.velZ = 0;
+                this.isDamaged = true; 
+                this.velX = 0;
+                this.velZ = 0;
             return true;
         }
 
@@ -1223,17 +1223,17 @@ public class Agent {
     }
 
     public int computeFallDamage(double fallDistance, float damageMultiplier) {
-    	if (TungstenModDataContainer.player == null) return 0;
-    	if (TungstenModDataContainer.player.getType().isIn(EntityTypeTags.FALL_DAMAGE_IMMUNE)) {
-    		return 0;
-    	}
+        if (TungstenModDataContainer.player == null) return 0;
+        if (TungstenModDataContainer.player.getType().isIn(EntityTypeTags.FALL_DAMAGE_IMMUNE)) {
+                return 0;
+        }
         float f = this.jumpBoost < 0 ? 0.0F : (float)(this.jumpBoost + 1);
         return MathHelper.ceil((fallDistance - 3.0f - f) * damageMultiplier);
     }
 
     public void checkBlockCollision(WorldView world) {
-    	double minOffset = 0.001; // default 0.001
-    	double maxOffset = 0.001; // default 0.001
+        double minOffset = 0.001; // default 0.001
+        double maxOffset = 0.001; // default 0.001
         BlockPos blockPos = new BlockPos(MathHelper.floor(this.box.minX + minOffset), MathHelper.floor(this.box.minY + minOffset), MathHelper.floor(this.box.minZ + minOffset));
         BlockPos blockPos2 = new BlockPos(MathHelper.floor(this.box.maxX - maxOffset), MathHelper.floor(this.box.maxY - maxOffset), MathHelper.floor(this.box.maxZ - maxOffset));
         BlockPos.Mutable pos = new BlockPos.Mutable();
@@ -1319,26 +1319,26 @@ public class Agent {
     }
 
     public float getVelocityMultiplier(WorldView world) {
-    	BlockState blockState = stateOrAir(world, new BlockPos(this.blockX, this.blockY, this.blockZ));   // off-thread null-safe (G107b)
-		float f = blockState.getBlock().getVelocityMultiplier();
-		if (!blockState.isOf(Blocks.WATER) && !blockState.isOf(Blocks.BUBBLE_COLUMN)) {
-			return (double)f == 1.0 ? stateOrAir(world, this.getLandingPos(world)).getBlock().getVelocityMultiplier() : f;
-		} else {
-			return f;
-		}
+        BlockState blockState = stateOrAir(world, new BlockPos(this.blockX, this.blockY, this.blockZ));   // off-thread null-safe (G107b)
+                float f = blockState.getBlock().getVelocityMultiplier();
+                if (!blockState.isOf(Blocks.WATER) && !blockState.isOf(Blocks.BUBBLE_COLUMN)) {
+                        return (double)f == 1.0 ? stateOrAir(world, this.getLandingPos(world)).getBlock().getVelocityMultiplier() : f;
+                } else {
+                        return f;
+                }
     }
     
     protected static Vec3d movementInputToVelocity(Vec3d movementInput, float speed, float yaw) {
-		double d = movementInput.lengthSquared();
-		if (d < 1.0E-7) {
-			return Vec3d.ZERO;
-		} else {
-			Vec3d vec3d = (d > 1.0 ? movementInput.normalize() : movementInput).multiply(speed);
-			float f = MathHelper.sin(yaw * (float) (Math.PI / 180.0));
-			float g = MathHelper.cos(yaw * (float) (Math.PI / 180.0));
-			return new Vec3d(vec3d.x * g - vec3d.z * f, vec3d.y, vec3d.z * g + vec3d.x * f);
-		}
-	}
+                double d = movementInput.lengthSquared();
+                if (d < 1.0E-7) {
+                        return Vec3d.ZERO;
+                } else {
+                        Vec3d vec3d = (d > 1.0 ? movementInput.normalize() : movementInput).multiply(speed);
+                        float f = MathHelper.sin(yaw * (float) (Math.PI / 180.0));
+                        float g = MathHelper.cos(yaw * (float) (Math.PI / 180.0));
+                        return new Vec3d(vec3d.x * g - vec3d.z * f, vec3d.y, vec3d.z * g + vec3d.x * f);
+                }
+        }
 
     /**
      * Matches vanilla Entity.getPosWithYOffset(0.500001f) logic.
@@ -1386,79 +1386,79 @@ public class Agent {
     }
     
     public boolean canSprint() {
-		return this.hunger.getFoodLevel() > 6.0F;
-	}
+                return this.hunger.getFoodLevel() > 6.0F;
+        }
     
     public boolean shouldSlowDown() {
-		return this.sneaking || this.keySneak;
-	}
+                return this.sneaking || this.keySneak;
+        }
     
 
-	private Vec2f applyMovementSpeedFactors(Vec2f input) {
-		if (input.lengthSquared() == 0.0F) {
-			return input;
-		} else {
-			Vec2f vec2f = input.multiply(0.98F);
-			if (this.usingItem) {
-				vec2f = vec2f.multiply(0.2F);
-			}
+        private Vec2f applyMovementSpeedFactors(Vec2f input) {
+                if (input.lengthSquared() == 0.0F) {
+                        return input;
+                } else {
+                        Vec2f vec2f = input.multiply(0.98F);
+                        if (this.usingItem) {
+                                vec2f = vec2f.multiply(0.2F);
+                        }
 
-			if (this.shouldSlowDown()) {
-				float f = 0.3F;
-				vec2f = vec2f.multiply(f);
-			}
-			
-			// Diagonal movement normalization (MC-271065), added in MC 1.21.4+.
-			vec2f = applyDirectionalMovementSpeedFactors(vec2f);
+                        if (this.shouldSlowDown()) {
+                                float f = 0.3F;
+                                vec2f = vec2f.multiply(f);
+                        }
+                        
+                        // Diagonal movement normalization (MC-271065), added in MC 1.21.4+.
+                        vec2f = applyDirectionalMovementSpeedFactors(vec2f);
 
-			return vec2f;
-		}
-	}
+                        return vec2f;
+                }
+        }
 
-	private static Vec2f applyDirectionalMovementSpeedFactors(Vec2f vec) {
-		float f = vec.length();
-		if (f <= 0.0F) {
-			return vec;
-		} else {
-			Vec2f vec2f = vec.multiply(1.0F / f);
-			float g = getDirectionalMovementSpeedMultiplier(vec2f);
-			float h = Math.min(f * g, 1.0F);
-			return vec2f.multiply(h);
-		}
-	}
+        private static Vec2f applyDirectionalMovementSpeedFactors(Vec2f vec) {
+                float f = vec.length();
+                if (f <= 0.0F) {
+                        return vec;
+                } else {
+                        Vec2f vec2f = vec.multiply(1.0F / f);
+                        float g = getDirectionalMovementSpeedMultiplier(vec2f);
+                        float h = Math.min(f * g, 1.0F);
+                        return vec2f.multiply(h);
+                }
+        }
 
-	private static float getDirectionalMovementSpeedMultiplier(Vec2f vec) {
-		float f = Math.abs(vec.x);
-		float g = Math.abs(vec.y);
-		float h = g > f ? f / g : g / f;
-		return MathHelper.sqrt(1.0F + MathHelper.square(h));
-	}
+        private static float getDirectionalMovementSpeedMultiplier(Vec2f vec) {
+                float f = Math.abs(vec.x);
+                float g = Math.abs(vec.y);
+                float h = g > f ? f / g : g / f;
+                return MathHelper.sqrt(1.0F + MathHelper.square(h));
+        }
     
     private boolean canStartSprinting() {
-		return Math.abs(this.forwardSpeed) > -0.1
-			&& this.canSprint()
-			&& this.keyForward
-			&& !this.horizontalCollision
-			&& !this.usingItem
-			&& this.blindness < 0
-			&& (!this.shouldSlowDown() || this.isSubmergedInWater)
-			&& (!this.touchingWater || this.isSubmergedInWater);
-	}
+                return Math.abs(this.forwardSpeed) > -0.1
+                        && this.canSprint()
+                        && this.keyForward
+                        && !this.horizontalCollision
+                        && !this.usingItem
+                        && this.blindness < 0
+                        && (!this.shouldSlowDown() || this.isSubmergedInWater)
+                        && (!this.touchingWater || this.isSubmergedInWater);
+        }
 
-	private boolean shouldStopSprinting() {
-		
-		return this.forwardSpeed == 0
-			|| !this.keyForward
-			|| !this.canSprint()
-			|| this.horizontalCollision && !this.collidedSoftly
-			|| this.touchingWater && !this.isSubmergedInWater;
-	}
+        private boolean shouldStopSprinting() {
+                
+                return this.forwardSpeed == 0
+                        || !this.keyForward
+                        || !this.canSprint()
+                        || this.horizontalCollision && !this.collidedSoftly
+                        || this.touchingWater && !this.isSubmergedInWater;
+        }
 
-	private boolean shouldStopSwimSprinting() {
-		return !this.touchingWater
-			|| !this.input.hasForwardMovement() && !this.onGround && !this.input.playerInput.sneak()
-			|| !this.canSprint();
-	}
+        private boolean shouldStopSwimSprinting() {
+                return !this.touchingWater
+                        || !this.input.hasForwardMovement() && !this.onGround && !this.input.playerInput.sneak()
+                        || !this.canSprint();
+        }
 
     public Box calculateBoundsForPose(EntityPose pose) {
         EntityDimensions size = POSE_DIMENSIONS.getOrDefault(pose, STANDING_DIMENSIONS);
@@ -1505,12 +1505,12 @@ public class Agent {
         AgentBlockCollisions collisions = new AgentBlockCollisions(world, this, box, true);
         
         while (collisions.hasNext()) {
-			if (!collisions.next().isEmpty()) {
-				return true;
-			}
-		}
+                        if (!collisions.next().isEmpty()) {
+                                return true;
+                        }
+                }
 
-		return false;
+                return false;
 
 //        if(!collisions.hasNext()) {
 //            this.scannedBlocks += collisions.scannedBlocks;
@@ -1540,8 +1540,8 @@ public class Agent {
      * direction search could never actually distinguish a clear direction from a blocked one.
      */
     private boolean wouldCollideAt(WorldView world, BlockPos pos) {
-    	Box box = this.box;
-		Box box2 = new Box((double)pos.getX(), box.minY, (double)pos.getZ(), (double)pos.getX() + 1.0, box.maxY, (double)pos.getZ() + 1.0).contract(1.0E-7);
+        Box box = this.box;
+                Box box2 = new Box((double)pos.getX(), box.minY, (double)pos.getZ(), (double)pos.getX() + 1.0, box.maxY, (double)pos.getZ() + 1.0).contract(1.0E-7);
         return this.canCollide(world, box2);
     }
 
@@ -1670,8 +1670,19 @@ public class Agent {
                     // "drift 0.830 (threshold 0.8) at tick 14" — a path abandoned for three
                     // centimetres. The tick-1 guarantee this check exists for is untouched.
                     int replayTick = Math.max(0, TungstenModDataContainer.EXECUTOR.getCurrentTick());
-                    double allowed = kaptainwutax.tungsten.TungstenConfig.get().driftThreshold
-                            + kaptainwutax.tungsten.TungstenConfig.get().driftPerTick * replayTick;
+                    // Frame-time-aware growth (audit angle 1): the per-tick term was tuned
+                    // at 20 fps; on slower hosts a tick covers more ground and the fixed
+                    // growth under-loosens. Scale the growth term by the same frame factor
+                    // WindMouseRotation uses. Tick-0 threshold (the tick-1 1.723 incident)
+                    // is untouched; driftFrameTimeAdaptive=false restores the exact old bound.
+                    kaptainwutax.tungsten.TungstenConfig cfg = kaptainwutax.tungsten.TungstenConfig.get();
+                    double frameFactor = cfg.driftFrameTimeAdaptive
+                            ? kaptainwutax.tungsten.util.DriftPolicy.currentFrameFactor(
+                                    kaptainwutax.tungsten.util.WindMouseRotation.REF_FRAME_MS,
+                                    kaptainwutax.tungsten.util.WindMouseRotation.MAX_CATCHUP)
+                            : 1.0;
+                    double allowed = kaptainwutax.tungsten.util.DriftPolicy.allowedBlocks(
+                            cfg.driftThreshold, cfg.driftPerTick, replayTick, frameFactor);
                     if (drift > allowed) {
                         Debug.logMessage(String.format(
                             "§c[Tungsten] Path stopped: drift %.3f blocks (threshold %.1f) at tick %d. " +
@@ -1752,96 +1763,96 @@ public class Agent {
 
         if(mismatch(this.movementSpeed, player.getMovementSpeed())) {
 
-        	if (TungstenModDataContainer.LOG_DEBUG_DATA) {
-        		Node node = TungstenModDataContainer.EXECUTOR.getCurrentNode();
-            	if (node != null) {
-    	        	StringBuilder string = new StringBuilder();
-    	
-    	    		string.append("{\n");
-    	    		if (node.input.forward != playerInput.forward()) {
-    	        		string.append("forward: ");
-    	        		string.append(playerInput.forward());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.forward);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.back != playerInput.backward()) {
-    	        		string.append("back: ");
-    	        		string.append(playerInput.backward());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.back);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.right != playerInput.right()) {
-    	        		string.append("right: ");
-    	        		string.append(playerInput.right());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.right);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.left != playerInput.left()) {
-    	        		string.append("left: ");
-    	        		string.append(playerInput.left());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.left);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.jump != playerInput.jump()) {
-    	        		string.append("jump: ");
-    	        		string.append(playerInput.jump());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.jump);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.sneak != playerInput.sneak()) {
-    	        		string.append("sneak: ");
-    	        		string.append(playerInput.sneak());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.sneak);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.sprint != playerInput.sprint()) {
-    	        		string.append("sprint: ");
-    	        		string.append(playerInput.sprint());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.sprint);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.pitch != player.getPitch()) {
-    	        		string.append("pitch: ");
-    	        		string.append(player.getPitch());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.pitch);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.input.yaw != player.getYaw()) {
-    	        		string.append("yaw: ");
-    	        		string.append(player.getYaw());
-    	        		string.append(" vs ");
-    	        		string.append(node.input.yaw);
-    	        		string.append("\n");
-    	    		}
-    	    		if (node.agent.onGround != player.isOnGround()) {
-    	        		string.append("isOnGround: ");
-    	        		string.append(player.isOnGround());
-    	        		string.append(" vs ");
-    	        		string.append(node.agent.onGround);
-    	        		string.append("\n");
-    	    		}
-    	    		string.append("\n");
-    	    		string.append("}");
-    	
-    	        	if (string.toString().length() > 4) {
-    		        	Debug.logMessage("------------");
-    		        	Debug.logMessage(string.toString());
-    		        	Debug.logMessage("Current Movement Speed: " + player.getMovementSpeed() + " \nExpected to be: " + this.movementSpeed + "");
-    		        	Debug.logMessage("------------");
-    	        	} else {
-    		        	Debug.logMessage("Current Movement Speed: " + player.getMovementSpeed() + " \nExpected to be: " + this.movementSpeed + "");
-    	        	}
-            	}	
-        	}
-        	
+                if (TungstenModDataContainer.LOG_DEBUG_DATA) {
+                        Node node = TungstenModDataContainer.EXECUTOR.getCurrentNode();
+                if (node != null) {
+                        StringBuilder string = new StringBuilder();
+        
+                        string.append("{\n");
+                        if (node.input.forward != playerInput.forward()) {
+                                string.append("forward: ");
+                                string.append(playerInput.forward());
+                                string.append(" vs ");
+                                string.append(node.input.forward);
+                                string.append("\n");
+                        }
+                        if (node.input.back != playerInput.backward()) {
+                                string.append("back: ");
+                                string.append(playerInput.backward());
+                                string.append(" vs ");
+                                string.append(node.input.back);
+                                string.append("\n");
+                        }
+                        if (node.input.right != playerInput.right()) {
+                                string.append("right: ");
+                                string.append(playerInput.right());
+                                string.append(" vs ");
+                                string.append(node.input.right);
+                                string.append("\n");
+                        }
+                        if (node.input.left != playerInput.left()) {
+                                string.append("left: ");
+                                string.append(playerInput.left());
+                                string.append(" vs ");
+                                string.append(node.input.left);
+                                string.append("\n");
+                        }
+                        if (node.input.jump != playerInput.jump()) {
+                                string.append("jump: ");
+                                string.append(playerInput.jump());
+                                string.append(" vs ");
+                                string.append(node.input.jump);
+                                string.append("\n");
+                        }
+                        if (node.input.sneak != playerInput.sneak()) {
+                                string.append("sneak: ");
+                                string.append(playerInput.sneak());
+                                string.append(" vs ");
+                                string.append(node.input.sneak);
+                                string.append("\n");
+                        }
+                        if (node.input.sprint != playerInput.sprint()) {
+                                string.append("sprint: ");
+                                string.append(playerInput.sprint());
+                                string.append(" vs ");
+                                string.append(node.input.sprint);
+                                string.append("\n");
+                        }
+                        if (node.input.pitch != player.getPitch()) {
+                                string.append("pitch: ");
+                                string.append(player.getPitch());
+                                string.append(" vs ");
+                                string.append(node.input.pitch);
+                                string.append("\n");
+                        }
+                        if (node.input.yaw != player.getYaw()) {
+                                string.append("yaw: ");
+                                string.append(player.getYaw());
+                                string.append(" vs ");
+                                string.append(node.input.yaw);
+                                string.append("\n");
+                        }
+                        if (node.agent.onGround != player.isOnGround()) {
+                                string.append("isOnGround: ");
+                                string.append(player.isOnGround());
+                                string.append(" vs ");
+                                string.append(node.agent.onGround);
+                                string.append("\n");
+                        }
+                        string.append("\n");
+                        string.append("}");
+        
+                        if (string.toString().length() > 4) {
+                                Debug.logMessage("------------");
+                                Debug.logMessage(string.toString());
+                                Debug.logMessage("Current Movement Speed: " + player.getMovementSpeed() + " \nExpected to be: " + this.movementSpeed + "");
+                                Debug.logMessage("------------");
+                        } else {
+                                Debug.logMessage("Current Movement Speed: " + player.getMovementSpeed() + " \nExpected to be: " + this.movementSpeed + "");
+                        }
+                }       
+                }
+                
             values.add(String.format("Movement Speed mismatch\n  real: %.10f\n  sim:  %.10f", player.getMovementSpeed(), this.movementSpeed));
         }
 
@@ -1866,9 +1877,9 @@ public class Agent {
             values.add(String.format("Submerged in water mismatch %s vs %s", player.isSubmergedInWater(), this.isSubmergedInWater));
         }
 
-	    if(this.input.playerInput.sneak() != playerInput.sneak()) {
-		    values.add(String.format("Sneaking mismatch %s vs %s", playerInput.sneak(), this.input.playerInput.sneak()));
-	    }
+            if(this.input.playerInput.sneak() != playerInput.sneak()) {
+                    values.add(String.format("Sneaking mismatch %s vs %s", playerInput.sneak(), this.input.playerInput.sneak()));
+            }
 
         if(this.swimming != player.isSwimming()) {
             values.add(String.format("Swimming mismatch %s vs %s", player.isSwimming(), this.swimming));
@@ -2245,8 +2256,8 @@ public class Agent {
     }
 
     public static Agent of(Agent other, AgentInput input) {
-    	PathInput pI = input.toPathInput();
-    	return of(other, pI);
+        PathInput pI = input.toPathInput();
+        return of(other, pI);
     }
 
     public static Agent of(Agent agent, PathInput input) {

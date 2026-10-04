@@ -4,11 +4,11 @@ import sys
 import time
 from pathlib import Path
 
-from py4j.java_gateway import JavaGateway
+from py4j.java_gateway import JavaGateway, GatewayParameters
 
 # Connect to the running Minecraft instance (default port 25333)
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 25333
-gw = JavaGateway(gateway_parameters={"port": PORT})
+gw = JavaGateway(gateway_parameters=GatewayParameters(port=PORT))
 bot = gw.entry_point
 
 print(f"Connected to bot on port {PORT}")

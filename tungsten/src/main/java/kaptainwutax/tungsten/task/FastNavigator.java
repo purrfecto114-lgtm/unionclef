@@ -37,7 +37,7 @@ public final class FastNavigator {
      *  used to hardcode a stricter 1.5, which left pathStatus reporting arrived=false forever on
      *  any goto FastNavigator had already completed and stopped between 1.5 and 2.0 blocks out —
      *  reproduced live 2026-09-01, see TODOS.md). */
-    public static final double ARRIVE_DIST = 2.0;
+    public static final double ARRIVE_DIST = kaptainwutax.tungsten.path.PathTolerances.NAVIGATOR_ARRIVAL;
     /** Bail if the bot stops making progress for this many ticks. */
     private static final int STALL_TICKS = 60;
     /**

@@ -283,17 +283,23 @@ No pompous slogans, no self-praise, no "elite" or "advanced" anything. Short, dr
 ## Build commands (only when user asks)
 
 ```bash
-gradlew compileJava     # compile all three modules
+gradlew compileJava     # compile everything — root task delegates to :1.21.11 (default);
+                        # also builds :tungsten via the project dependency. Targets:
+                        # :1.21.1:compileJava / :1.21:compileJava for other versions.
 gradlew build           # full build with JAR
 gradlew runClient       # launch Minecraft
 ```
 
 ## Mappings
 
-All modules use **yarn** mappings (`net.fabricmc:yarn:1.21+build.9:v2`).
+All modules use **yarn** mappings, but the pins are per-version now (see `build.gradle:55-59`
+`mappingsVersions` — `1.21+build.9`, `1.21.1+build.3`, `1.21.11+build.3`), not one shared string.
+Known wart: `tungsten/build.gradle` pins `1.21.11+build.4` while altoclef's 1.21.11 uses
+`1.21.11+build.3`. Same MC version, different mapping build; intermediary names are stable so it
+compiles, but treat the pair as an open inconsistency.
 - altoclef: yarn (original)
 - tungsten: yarn (original)
-- baritone: yarn (migrated from mojmap via `migrateMappings`)
+- baritone: NOT COMPILED since G-0 (source reference only)
 
 When referencing Minecraft classes, always use yarn names:
 - `MinecraftClient` not `Minecraft`

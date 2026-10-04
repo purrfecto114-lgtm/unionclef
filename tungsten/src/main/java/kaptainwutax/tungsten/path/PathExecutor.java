@@ -175,222 +175,222 @@ public class PathExecutor {
         this.startTime = System.currentTimeMillis();
     }
 
-	/**
-	 * A path may be rooted AHEAD of the player (the search is seeded at a future
-	 * waypoint so it can compute while the walker is still travelling). Replaying
-	 * such a path immediately is nonsense: the very first comparison sees a
-	 * 20-block gap and aborts on drift, forever. So an out-of-reach path is held
-	 * ARMED — the walker keeps driving — and replay begins when the bot actually
-	 * arrives at the root.
-	 */
-	/**
-	 * How close to the path root the bot must be before replay may start.
-	 *
-	 * <p>This used to be a fixed 2.0 while the executor ABORTS on a simulation drift of
-	 * {@code driftThreshold} (0.8). Anything rooted between those two numbers was therefore
-	 * NOT armed, began replaying immediately, and was killed by the drift check on tick 1 —
-	 * a guaranteed-failure band. Observed on the parkour courses:
-	 * {@code Path stopped: drift 1.723 blocks (threshold 0.8) at tick 1}, every single time.
-	 *
-	 * <p>Tied to the drift threshold now, and deliberately STRICTER than it, so replay can
-	 * never begin already in violation of the rule that ends it.
-	 */
-	private static double armTolerance() {
-		return TungstenConfig.get().driftThreshold * 0.5;
-	}
-	private boolean armed = false;
+        /**
+         * A path may be rooted AHEAD of the player (the search is seeded at a future
+         * waypoint so it can compute while the walker is still travelling). Replaying
+         * such a path immediately is nonsense: the very first comparison sees a
+         * 20-block gap and aborts on drift, forever. So an out-of-reach path is held
+         * ARMED — the walker keeps driving — and replay begins when the bot actually
+         * arrives at the root.
+         */
+        /**
+         * How close to the path root the bot must be before replay may start.
+         *
+         * <p>This used to be a fixed 2.0 while the executor ABORTS on a simulation drift of
+         * {@code driftThreshold} (0.8). Anything rooted between those two numbers was therefore
+         * NOT armed, began replaying immediately, and was killed by the drift check on tick 1 —
+         * a guaranteed-failure band. Observed on the parkour courses:
+         * {@code Path stopped: drift 1.723 blocks (threshold 0.8) at tick 1}, every single time.
+         *
+         * <p>Tied to the drift threshold now, and deliberately STRICTER than it, so replay can
+         * never begin already in violation of the rule that ends it.
+         */
+        private static double armTolerance() {
+                return TungstenConfig.get().driftThreshold * 0.5;
+        }
+        private boolean armed = false;
 
-	/** Body to the current node, then node to node, for the next ten ticks of the replay. */
-	private boolean replayAheadLethal(ClientPlayerEntity player) {
-		List<Node> p = this.path;
-		if (p == null) return false;
-		var w = player.getEntityWorld();
-		net.minecraft.util.math.Vec3d prev = player.getEntityPos();
-		for (int i = this.tick; i < Math.min(p.size(), this.tick + 10); i++) {
-			net.minecraft.util.math.Vec3d next = p.get(i).agent.getPos();
-			if (kaptainwutax.tungsten.path.RouteHazards.segmentLethal(w, prev, next)) return true;
-			prev = next;
-		}
-		return false;
-	}
+        /** Body to the current node, then node to node, for the next ten ticks of the replay. */
+        private boolean replayAheadLethal(ClientPlayerEntity player) {
+                List<Node> p = this.path;
+                if (p == null) return false;
+                var w = player.getEntityWorld();
+                net.minecraft.util.math.Vec3d prev = player.getEntityPos();
+                for (int i = this.tick; i < Math.min(p.size(), this.tick + 10); i++) {
+                        net.minecraft.util.math.Vec3d next = p.get(i).agent.getPos();
+                        if (kaptainwutax.tungsten.path.RouteHazards.segmentLethal(w, prev, next)) return true;
+                        prev = next;
+                }
+                return false;
+        }
 
-	/**
-	 * Is the body, by its ACTUAL motion, about to step into a lethal column? replayAheadLethal checks
-	 * the planned nodes; the replay drifts off them, and a drift over a lip is not in the plan.
-	 * Measured: a nether death reproduced from rung-ender with the replay driving (exec=true,
-	 * walker=false, wasOnGround=true) -- takeoff at (162.7,52.9,109.2), 23 blocks down into lava at
-	 * y=30. Look ahead along the velocity, or the pressed heading when barely moving, by at least
-	 * 1.4 blocks (sprint scales it), with the same column rule RouteHazards gives every executor.
-	 */
-	private boolean motionAheadLethal(ClientPlayerEntity player) {
-		var w = player.getEntityWorld();
-		net.minecraft.util.math.Vec3d pos = player.getEntityPos();
-		net.minecraft.util.math.Vec3d v = player.getVelocity();
-		double hx = v.x, hz = v.z;
-		double speed = Math.sqrt(hx * hx + hz * hz);
-		if (speed < 0.03) {
-			double yaw = Math.toRadians(player.getYaw());
-			if (!TungstenMod.mc.options.forwardKey.isPressed()) return false;
-			hx = -Math.sin(yaw); hz = Math.cos(yaw); speed = 1;
-		}
-		double look = Math.max(1.4, Math.sqrt(v.x * v.x + v.z * v.z) * 8.0);
-		net.minecraft.util.math.Vec3d ahead = pos.add(hx / speed * look, 0, hz / speed * look);
-		return kaptainwutax.tungsten.path.RouteHazards.segmentLethal(w, pos, ahead);
-	}
+        /**
+         * Is the body, by its ACTUAL motion, about to step into a lethal column? replayAheadLethal checks
+         * the planned nodes; the replay drifts off them, and a drift over a lip is not in the plan.
+         * Measured: a nether death reproduced from rung-ender with the replay driving (exec=true,
+         * walker=false, wasOnGround=true) -- takeoff at (162.7,52.9,109.2), 23 blocks down into lava at
+         * y=30. Look ahead along the velocity, or the pressed heading when barely moving, by at least
+         * 1.4 blocks (sprint scales it), with the same column rule RouteHazards gives every executor.
+         */
+        private boolean motionAheadLethal(ClientPlayerEntity player) {
+                var w = player.getEntityWorld();
+                net.minecraft.util.math.Vec3d pos = player.getEntityPos();
+                net.minecraft.util.math.Vec3d v = player.getVelocity();
+                double hx = v.x, hz = v.z;
+                double speed = Math.sqrt(hx * hx + hz * hz);
+                if (speed < 0.03) {
+                        double yaw = Math.toRadians(player.getYaw());
+                        if (!TungstenMod.mc.options.forwardKey.isPressed()) return false;
+                        hx = -Math.sin(yaw); hz = Math.cos(yaw); speed = 1;
+                }
+                double look = Math.max(1.4, Math.sqrt(v.x * v.x + v.z * v.z) * 8.0);
+                net.minecraft.util.math.Vec3d ahead = pos.add(hx / speed * look, 0, hz / speed * look);
+                return kaptainwutax.tungsten.path.RouteHazards.segmentLethal(w, pos, ahead);
+        }
 
-	/** Replay ticks stopped because the body's own motion headed into a lethal column. */
-	public static volatile int execMotionLethal = 0;
+        /** Replay ticks stopped because the body's own motion headed into a lethal column. */
+        public static volatile int execMotionLethal = 0;
 
-	public synchronized void setPath(List<Node> path) {
-		// NOTE: the completion callback is deliberately PRESERVED. This used to do
-		// `this.cb = null`, which destroyed the ;goto retry callback the moment the very
-		// first physics path was emitted — so MAX_RETRIES never ran, "Finished!" never
-		// fired, and a goto that needed more than one physics leg simply stopped forever.
-		// addPath() has always preserved cb; this was a one-line asymmetry between them.
-		this.startTime = System.currentTimeMillis();
-	    stop = false;
-    	this.path = path;
-    	this.tick = 0;
-    	this.armed = false;
-    	if (isClient && path != null && !path.isEmpty() && TungstenMod.mc.player != null) {
-    		double toRoot = TungstenMod.mc.player.getEntityPos()
-    				.distanceTo(path.get(0).agent.getPos());
-    		// Arming exists for ONE reason: the walker is still travelling toward the root,
-    		// so replaying now would compare against a position the bot has not reached yet.
-    		// If the walker is NOT running, nobody is going to bring the bot there — arming
-    		// is then a deadlock, not a wait. That is exactly what stalled every ladder run:
-    		// the hand-off stops the walker, the physics path armed 2.2 blocks ahead, and
-    		// both sides waited for each other until the navigator gave up.
-    		if (toRoot > armTolerance() && kaptainwutax.tungsten.task.BlockPathWalker.isRunning()) {
-    			this.armed = true;   // wait for the bot to reach the root
-    			kaptainwutax.tungsten.Debug.logMessage(String.format(
-    					"Path armed %.1f blocks ahead — walker drives until we reach it", toRoot));
-    		}
-    	}
-    	RenderHelper.renderPathCurrentlyExecuted();
-	}
+        public synchronized void setPath(List<Node> path) {
+                // NOTE: the completion callback is deliberately PRESERVED. This used to do
+                // `this.cb = null`, which destroyed the ;goto retry callback the moment the very
+                // first physics path was emitted — so MAX_RETRIES never ran, "Finished!" never
+                // fired, and a goto that needed more than one physics leg simply stopped forever.
+                // addPath() has always preserved cb; this was a one-line asymmetry between them.
+                this.startTime = System.currentTimeMillis();
+            stop = false;
+        this.path = path;
+        this.tick = 0;
+        this.armed = false;
+        if (isClient && path != null && !path.isEmpty() && TungstenMod.mc.player != null) {
+                double toRoot = TungstenMod.mc.player.getEntityPos()
+                                .distanceTo(path.get(0).agent.getPos());
+                // Arming exists for ONE reason: the walker is still travelling toward the root,
+                // so replaying now would compare against a position the bot has not reached yet.
+                // If the walker is NOT running, nobody is going to bring the bot there — arming
+                // is then a deadlock, not a wait. That is exactly what stalled every ladder run:
+                // the hand-off stops the walker, the physics path armed 2.2 blocks ahead, and
+                // both sides waited for each other until the navigator gave up.
+                if (toRoot > armTolerance() && kaptainwutax.tungsten.task.BlockPathWalker.isRunning()) {
+                        this.armed = true;   // wait for the bot to reach the root
+                        kaptainwutax.tungsten.Debug.logMessage(String.format(
+                                        "Path armed %.1f blocks ahead — walker drives until we reach it", toRoot));
+                }
+        }
+        RenderHelper.renderPathCurrentlyExecuted();
+        }
 
-	/** True while a spliced path waits for the bot to reach its root. */
-	public boolean isArmed() { return armed; }
-	
-	public synchronized void addToPath(Node n) {
-		this.path.add(n);
-    	RenderHelper.renderPathCurrentlyExecuted();
-	}
-	
-	public synchronized void addPath(List<Node> path) {
-		if (stop) {
-			setPath(path);
-			return;
-		}
-		if (this.path == null) {
-			setPath(path);
-			return;
-		}
-		this.path.addAll(path);
-    	RenderHelper.renderPathCurrentlyExecuted();
-	}
-	
-	public List<Node> getPath() {
-		return this.path;
-	}
-	
-	public Node getCurrentNode() {
-		// EMPTY path (e.g. "mining without a physics leg" — a break with no movement
-		// nodes) must not index get(size-1)==get(-1) -> IndexOutOfBounds crashes the
-		// whole client tick. Return null; callers already null-check.
-		if (this.path == null || this.path.isEmpty()) return null;
-		if (this.tick >= this.path.size()) return this.path.get(this.path.size()-1);
-		return this.path.get(this.tick);
-	}
-	
+        /** True while a spliced path waits for the bot to reach its root. */
+        public boolean isArmed() { return armed; }
+        
+        public synchronized void addToPath(Node n) {
+                this.path.add(n);
+        RenderHelper.renderPathCurrentlyExecuted();
+        }
+        
+        public synchronized void addPath(List<Node> path) {
+                if (stop) {
+                        setPath(path);
+                        return;
+                }
+                if (this.path == null) {
+                        setPath(path);
+                        return;
+                }
+                this.path.addAll(path);
+        RenderHelper.renderPathCurrentlyExecuted();
+        }
+        
+        public List<Node> getPath() {
+                return this.path;
+        }
+        
+        public Node getCurrentNode() {
+                // EMPTY path (e.g. "mining without a physics leg" — a break with no movement
+                // nodes) must not index get(size-1)==get(-1) -> IndexOutOfBounds crashes the
+                // whole client tick. Return null; callers already null-check.
+                if (this.path == null || this.path.isEmpty()) return null;
+                if (this.tick >= this.path.size()) return this.path.get(this.path.size()-1);
+                return this.path.get(this.tick);
+        }
+        
 
-	public int getCurrentTick() {
-		return this.tick;
-	}
+        public int getCurrentTick() {
+                return this.tick;
+        }
 
 
-	/**
-	 * Is there a route here AT ALL — armed or not. Distinct from {@link #isRunning()} on purpose.
-	 *
-	 * <p>{@code isRunning()} excludes an armed path so that callers who stand down for "the
-	 * executor is busy" keep driving the walker instead. That is right for THEM and was fatal for
-	 * the TICK: the mixin gated ticking on {@code isExecutorRunning()}, so an armed path was never
-	 * ticked — and the only code that can ever disarm, expire or replay it lives inside that tick.
-	 * The deadlock closed on itself: disarming required a tick, and the tick required not being
-	 * armed.
-	 *
-	 * <p>Measured on chase_terrain: fourteen freeze windows, the identical position for
-	 * eighty-four seconds, and the same line each time —
-	 * {@code path=119 tick=0 ... nav=false}. A full route, a counter that never moves, and no
-	 * walker to bring the bot to its root.
-	 */
-	public boolean hasPath() {
-		return this.path != null;
-	}
+        /**
+         * Is there a route here AT ALL — armed or not. Distinct from {@link #isRunning()} on purpose.
+         *
+         * <p>{@code isRunning()} excludes an armed path so that callers who stand down for "the
+         * executor is busy" keep driving the walker instead. That is right for THEM and was fatal for
+         * the TICK: the mixin gated ticking on {@code isExecutorRunning()}, so an armed path was never
+         * ticked — and the only code that can ever disarm, expire or replay it lives inside that tick.
+         * The deadlock closed on itself: disarming required a tick, and the tick required not being
+         * armed.
+         *
+         * <p>Measured on chase_terrain: fourteen freeze windows, the identical position for
+         * eighty-four seconds, and the same line each time —
+         * {@code path=119 tick=0 ... nav=false}. A full route, a counter that never moves, and no
+         * walker to bring the bot to its root.
+         */
+        public boolean hasPath() {
+                return this.path != null;
+        }
 
-	/**
-	 * The walker has stopped, so an ARMED path is waiting for a delivery that is not coming.
-	 *
-	 * <p>Arming means exactly one thing: "the walker is running and will bring us to this path's
-	 * root" — {@code setPath} only arms while {@code BlockPathWalker.isRunning()}. When the walker
-	 * stops, that premise is dead, and the path cannot rescue itself: an armed path is excluded
-	 * from {@code isRunning()}, so the executor is never ticked, so the branch that would expire
-	 * or disarm it never runs. Measured on chase_terrain as fourteen freeze windows at ONE
-	 * position over eighty-four seconds — {@code path=119 tick=0 ... nav=false}.
-	 *
-	 * <p>It is DROPPED rather than replayed. Replaying it was tried by ticking any held route and
-	 * measured worse (nav 12/12 -> 9/12): a path that was waiting starts taking the body from
-	 * whatever is now driving. Dropping hands the problem back to the planner, which is what the
-	 * file already wanted — "a stale splice cannot pin the executor forever".
-	 */
-	public synchronized void onWalkerStopped() {
-		if (this.path != null && this.armed) {
-			kaptainwutax.tungsten.Debug.logMessage(
-					"Armed path dropped: the walker that was to reach its root has stopped");
-			this.path = null;
-			this.armed = false;
-		}
-	}
+        /**
+         * The walker has stopped, so an ARMED path is waiting for a delivery that is not coming.
+         *
+         * <p>Arming means exactly one thing: "the walker is running and will bring us to this path's
+         * root" — {@code setPath} only arms while {@code BlockPathWalker.isRunning()}. When the walker
+         * stops, that premise is dead, and the path cannot rescue itself: an armed path is excluded
+         * from {@code isRunning()}, so the executor is never ticked, so the branch that would expire
+         * or disarm it never runs. Measured on chase_terrain as fourteen freeze windows at ONE
+         * position over eighty-four seconds — {@code path=119 tick=0 ... nav=false}.
+         *
+         * <p>It is DROPPED rather than replayed. Replaying it was tried by ticking any held route and
+         * measured worse (nav 12/12 -> 9/12): a path that was waiting starts taking the body from
+         * whatever is now driving. Dropping hands the problem back to the planner, which is what the
+         * file already wanted — "a stale splice cannot pin the executor forever".
+         */
+        public synchronized void onWalkerStopped() {
+                if (this.path != null && this.armed) {
+                        kaptainwutax.tungsten.Debug.logMessage(
+                                        "Armed path dropped: the walker that was to reach its root has stopped");
+                        this.path = null;
+                        this.armed = false;
+                }
+        }
 
-	/**
-	 * What is this executor actually DOING? Read-only accessors for the stall instrument.
-	 *
-	 * <p>{@link #isRunning()} answers "does a path exist whose replay has not run off the end",
-	 * which is a STATE, not activity -- an executor that holds a path and never advances its tick
-	 * index reports running for ever. Measured at the wander's stall: the executor is running on
-	 * 49-84% of locked ticks while MovementQueue.isRunning() and BlockPathWalker.isRunning() are
-	 * ZERO across six runs of both arms, so something here holds the body without stepping it.
-	 * These say which of the three shapes it is: mining a wall, placing a bridge, or replaying a
-	 * path whose index does not move.
-	 */
-	public boolean isBreakingNow() { return breakQueue != null && !breakQueue.isEmpty(); }
+        /**
+         * What is this executor actually DOING? Read-only accessors for the stall instrument.
+         *
+         * <p>{@link #isRunning()} answers "does a path exist whose replay has not run off the end",
+         * which is a STATE, not activity -- an executor that holds a path and never advances its tick
+         * index reports running for ever. Measured at the wander's stall: the executor is running on
+         * 49-84% of locked ticks while MovementQueue.isRunning() and BlockPathWalker.isRunning() are
+         * ZERO across six runs of both arms, so something here holds the body without stepping it.
+         * These say which of the three shapes it is: mining a wall, placing a bridge, or replaying a
+         * path whose index does not move.
+         */
+        public boolean isBreakingNow() { return breakQueue != null && !breakQueue.isEmpty(); }
 
-	/** @see #isBreakingNow() */
-	public boolean isPlacingNow() { return placeQueue != null && !placeQueue.isEmpty(); }
+        /** @see #isBreakingNow() */
+        public boolean isPlacingNow() { return placeQueue != null && !placeQueue.isEmpty(); }
 
-	/** Replay index; paired with {@link #pathSizeNow()} it says whether the replay is advancing. */
-	public int tickIndexNow() { return tick; }
+        /** Replay index; paired with {@link #pathSizeNow()} it says whether the replay is advancing. */
+        public int tickIndexNow() { return tick; }
 
-	/** Size of the path being replayed, or -1 when there is none. @see #tickIndexNow() */
-	public int pathSizeNow() { return path == null ? -1 : path.size(); }
+        /** Size of the path being replayed, or -1 when there is none. @see #tickIndexNow() */
+        public int pathSizeNow() { return path == null ? -1 : path.size(); }
 
-	/** True while a path is spliced-and-waiting rather than replaying. @see #isRunning() */
-	public boolean isArmedNow() { return armed; }
+        /** True while a path is spliced-and-waiting rather than replaying. @see #isRunning() */
+        public boolean isArmedNow() { return armed; }
 
-	/**
-	 * Has mining actually STARTED, as opposed to a plan merely being queued?
-	 *
-	 * <p>⛔ THE DISTINCTION THAT MAY INVALIDATE A MEASUREMENT I ALREADY PUBLISHED.
-	 * {@code breakQueue != null && !isEmpty()} means a mining plan EXISTS. tickBreaking only runs
-	 * once the replay has reached the end of its segment, so an executor still walking toward the
-	 * wall holds a queue, presses nothing, and looks identical to one that is failing to mine.
-	 * breakingTicks is incremented only inside tickBreaking, so a non-zero value is proof the
-	 * miner is actually running.
-	 */
-	public boolean isMiningNow() { return breakingTicks > 0; }
+        /**
+         * Has mining actually STARTED, as opposed to a plan merely being queued?
+         *
+         * <p>⛔ THE DISTINCTION THAT MAY INVALIDATE A MEASUREMENT I ALREADY PUBLISHED.
+         * {@code breakQueue != null && !isEmpty()} means a mining plan EXISTS. tickBreaking only runs
+         * once the replay has reached the end of its segment, so an executor still walking toward the
+         * wall holds a queue, presses nothing, and looks identical to one that is failing to mine.
+         * breakingTicks is incremented only inside tickBreaking, so a non-zero value is proof the
+         * miner is actually running.
+         */
+        public boolean isMiningNow() { return breakingTicks > 0; }
 
-	public boolean isRunning() {
+        public boolean isRunning() {
         // An ARMED path is waiting, not running: while it waits the walker must
         // keep driving (and callers that stand down for "the executor is busy"
         // must not stand down), otherwise nothing moves the bot to the root and
@@ -404,91 +404,91 @@ public class PathExecutor {
     
     public synchronized void tick(ClientPlayerEntity player, GameOptions options) {
         if (this.path == null) return;
-    	if(TungstenMod.pauseKeyBinding.isPressed() || stop) {
-    		// A MINING/BRIDGING segment runs with an EMPTY path (the "At the wall" and
-    		// "At the gap" shortcuts): there is no recorded replay, so a drift abort —
-    		// which is a statement about the REPLAY diverging from reality — has nothing
-    		// to say about it. Letting `stop` fall through here wiped the whole queue,
-    		// silently, and that is what made nav_break start mining and then do nothing.
-    		//
-    		// The abort itself is left ALONE: weakening it on the Agent side regressed
-    		// nav_gaps from a stable 6/6 to failing, because the parkour hand-off depends
-    		// on it firing. Only the consequence is narrowed, here, where the distinction
-    		// between "abandon a replay" and "abandon the work" actually lives.
-    		boolean replayInProgress = this.path != null && !this.path.isEmpty();
-    		boolean explicitStop = TungstenMod.pauseKeyBinding.isPressed();
-    		if (!replayInProgress && !explicitStop && (breakQueue != null || placeQueue != null)) {
-    			stop = false;                 // consume the flag, keep doing the real work
-    			// fall through to the normal tick so tickBreaking/tickPlacing can run
-    		} else {
-    		if (breakQueue != null) {
-    			// Never discard a mining plan silently — that hid the nav_break failure for
-    			// a whole session (mining started, then simply ceased to exist).
-    			Debug.logMessage("Mining cancelled by stop flag (" + breakQueue.size() + " block(s) left)");
-    			MinecraftClient.getInstance().interactionManager.cancelBlockBreaking();
-    			TungstenModRenderContainer.BREAK_PLAN.clear();
-    			breakQueue = null; breakingTicks = 0; breakBudgetTarget = null; settleTicks = 0;
-    		}
-    		if (placeQueue != null) { placeQueue = null; placingTicks = 0; }
-    		// A stop mid-mine must release the attack key and the aim immediately —
-    		// otherwise the bot keeps swinging and the camera stays locked on the
-    		// block until the stale-aim timeout (part of the #29 frozen-camera fix).
-    		options.attackKey.setPressed(false);
-    		kaptainwutax.tungsten.util.WindMouseRotation.INSTANCE.clearTarget();
-    		this.tick = this.path.size();
-    		// player.input.playerInput = ... // MC 1.21: Input has no playerInput field
-		    options.forwardKey.setPressed(false);
-		    options.backKey.setPressed(false);
-		    options.leftKey.setPressed(false);
-		    options.rightKey.setPressed(false);
-		    options.jumpKey.setPressed(false);
-		    options.sneakKey.setPressed(false);
-		    options.sprintKey.setPressed(false);
-		    this.path = null;
-		    stop = false;
-		    TungstenModRenderContainer.RUNNING_PATH_RENDERER.clear();
-		    TungstenModRenderContainer.BLOCK_PATH_RENDERER.clear();
-    		return;
-    		}
-    	}
-    	// ARMED: this path starts ahead of us. Do not replay it (and do not touch
-    	// the movement keys — the walker owns them until we get there). Start the
-    	// moment the bot is at the root; give up if it never arrives, so a stale
-    	// splice cannot pin the executor forever.
-    	if (this.armed) {
-    		double toRoot = player.getEntityPos().distanceTo(this.path.get(0).agent.getPos());
-    		if (toRoot <= armTolerance()) {
-    			this.armed = false;
-    			this.startTime = System.currentTimeMillis();
-    			kaptainwutax.tungsten.Debug.logMessage("Path armed -> replaying (reached root)");
-    		} else if (!kaptainwutax.tungsten.task.BlockPathWalker.isRunning()) {
-    			// NOBODY IS BRINGING US THERE. setPath only arms while the walker is running,
-    			// for exactly this reason — its own comment says "if the walker is NOT running,
-    			// nobody is going to bring the bot there; arming is then a deadlock, not a wait".
-    			// But the walker can STOP after the arming, and then the deadlock happens anyway:
-    			// the executor sits on a full route it refuses to replay until the 15-second
-    			// expiry, fifteen times over.
-    			//
-    			// Measured on chase_terrain, at a freeze window:
-    			//   path=117 tick=0 ... nav=false
-    			// a 117-node route, tick zero, navigator not running. The bench counted FIFTEEN
-    			// six-second freezes in one chase and the gap grew to 130 blocks.
-    			//
-    			// The wait is over the moment its premise is: disarm and replay from here.
-    			kaptainwutax.tungsten.Debug.logMessage(
-    					"Armed path: walker gone — replaying from here instead of waiting");
-    			this.armed = false;
-    			this.startTime = System.currentTimeMillis();
-    		} else {
-    			if (System.currentTimeMillis() - this.startTime > 15000) {
-    				kaptainwutax.tungsten.Debug.logMessage(
-    						"Armed path expired (never reached its root) — dropping it");
-    				this.path = null;
-    				this.armed = false;
-    			}
-    			return;
-    		}
-    	}
+        if(TungstenMod.pauseKeyBinding.isPressed() || stop) {
+                // A MINING/BRIDGING segment runs with an EMPTY path (the "At the wall" and
+                // "At the gap" shortcuts): there is no recorded replay, so a drift abort —
+                // which is a statement about the REPLAY diverging from reality — has nothing
+                // to say about it. Letting `stop` fall through here wiped the whole queue,
+                // silently, and that is what made nav_break start mining and then do nothing.
+                //
+                // The abort itself is left ALONE: weakening it on the Agent side regressed
+                // nav_gaps from a stable 6/6 to failing, because the parkour hand-off depends
+                // on it firing. Only the consequence is narrowed, here, where the distinction
+                // between "abandon a replay" and "abandon the work" actually lives.
+                boolean replayInProgress = this.path != null && !this.path.isEmpty();
+                boolean explicitStop = TungstenMod.pauseKeyBinding.isPressed();
+                if (!replayInProgress && !explicitStop && (breakQueue != null || placeQueue != null)) {
+                        stop = false;                 // consume the flag, keep doing the real work
+                        // fall through to the normal tick so tickBreaking/tickPlacing can run
+                } else {
+                if (breakQueue != null) {
+                        // Never discard a mining plan silently — that hid the nav_break failure for
+                        // a whole session (mining started, then simply ceased to exist).
+                        Debug.logMessage("Mining cancelled by stop flag (" + breakQueue.size() + " block(s) left)");
+                        MinecraftClient.getInstance().interactionManager.cancelBlockBreaking();
+                        TungstenModRenderContainer.BREAK_PLAN.clear();
+                        breakQueue = null; breakingTicks = 0; breakBudgetTarget = null; settleTicks = 0;
+                }
+                if (placeQueue != null) { placeQueue = null; placingTicks = 0; }
+                // A stop mid-mine must release the attack key and the aim immediately —
+                // otherwise the bot keeps swinging and the camera stays locked on the
+                // block until the stale-aim timeout (part of the #29 frozen-camera fix).
+                options.attackKey.setPressed(false);
+                kaptainwutax.tungsten.util.WindMouseRotation.INSTANCE.clearTarget();
+                this.tick = this.path.size();
+                // player.input.playerInput = ... // MC 1.21: Input has no playerInput field
+                    options.forwardKey.setPressed(false);
+                    options.backKey.setPressed(false);
+                    options.leftKey.setPressed(false);
+                    options.rightKey.setPressed(false);
+                    options.jumpKey.setPressed(false);
+                    options.sneakKey.setPressed(false);
+                    options.sprintKey.setPressed(false);
+                    this.path = null;
+                    stop = false;
+                    TungstenModRenderContainer.RUNNING_PATH_RENDERER.clear();
+                    TungstenModRenderContainer.BLOCK_PATH_RENDERER.clear();
+                return;
+                }
+        }
+        // ARMED: this path starts ahead of us. Do not replay it (and do not touch
+        // the movement keys — the walker owns them until we get there). Start the
+        // moment the bot is at the root; give up if it never arrives, so a stale
+        // splice cannot pin the executor forever.
+        if (this.armed) {
+                double toRoot = player.getEntityPos().distanceTo(this.path.get(0).agent.getPos());
+                if (toRoot <= armTolerance()) {
+                        this.armed = false;
+                        this.startTime = System.currentTimeMillis();
+                        kaptainwutax.tungsten.Debug.logMessage("Path armed -> replaying (reached root)");
+                } else if (!kaptainwutax.tungsten.task.BlockPathWalker.isRunning()) {
+                        // NOBODY IS BRINGING US THERE. setPath only arms while the walker is running,
+                        // for exactly this reason — its own comment says "if the walker is NOT running,
+                        // nobody is going to bring the bot there; arming is then a deadlock, not a wait".
+                        // But the walker can STOP after the arming, and then the deadlock happens anyway:
+                        // the executor sits on a full route it refuses to replay until the 15-second
+                        // expiry, fifteen times over.
+                        //
+                        // Measured on chase_terrain, at a freeze window:
+                        //   path=117 tick=0 ... nav=false
+                        // a 117-node route, tick zero, navigator not running. The bench counted FIFTEEN
+                        // six-second freezes in one chase and the gap grew to 130 blocks.
+                        //
+                        // The wait is over the moment its premise is: disarm and replay from here.
+                        kaptainwutax.tungsten.Debug.logMessage(
+                                        "Armed path: walker gone — replaying from here instead of waiting");
+                        this.armed = false;
+                        this.startTime = System.currentTimeMillis();
+                } else {
+                        if (System.currentTimeMillis() - this.startTime > 15000) {
+                                kaptainwutax.tungsten.Debug.logMessage(
+                                                "Armed path expired (never reached its root) — dropping it");
+                                this.path = null;
+                                this.armed = false;
+                        }
+                        return;
+                }
+        }
 
         if (this.tick == 0 && !this.path.isEmpty() && player.isOnGround()
                 && !player.isTouchingWater() && !player.isClimbing()
@@ -535,34 +535,38 @@ public class PathExecutor {
             }
         }
 
-    	if(this.tick == this.path.size()) {
-    		// mine the planned wall before declaring the segment finished —
-    		// the continuation search / goto retry then sees the opened world
-    		if (tickBreaking(player, options)) {
-    			return;
-    		}
-    		// pave the planned bridge floor before finishing the segment — the
-    		// continuation search then sees the now-bridged world (mirror of breaking)
-    		if (tickPlacing(player, options)) {
-    			return;
-    		}
-    		// DID WE ACTUALLY GET THERE? Nothing ever asked.
-    		// A path replayed to its end frees the executor (isRunning() is false once
-    		// tick > path.size()), the near-goal branch sees "not busy" and orders another
-    		// search, and the loop closes. Measured across a five-run sweep, the failing run
-    		// had pdNearBusy=1455 / pdNearFind=385 against 304 / 62 in the best one -- five
-    		// times as many paths run out. Count arrival against the path's own last cell
-    		// before declaring the segment finished, so the two outcomes stop looking alike.
-    		try {
-    			net.minecraft.util.math.Vec3d last = this.path.get(this.path.size() - 1)
-    					.agent.getPos();
-    			double dx = player.getX() - last.x, dy = player.getY() - last.y,
-    					dz = player.getZ() - last.z;
-    			if (dx * dx + dy * dy + dz * dz <= 2.25) execArrived++; else execRanOut++;
-    		} catch (Throwable ignored) { execRanOut++; }
-    		long endTime = System.currentTimeMillis();
-    		long elapsedTime = endTime - startTime;
-    		long minutes = (elapsedTime / 1000) / 60;
+        if(this.tick == this.path.size()) {
+                // mine the planned wall before declaring the segment finished —
+                // the continuation search / goto retry then sees the opened world
+                if (tickBreaking(player, options)) {
+                        return;
+                }
+                // pave the planned bridge floor before finishing the segment — the
+                // continuation search then sees the now-bridged world (mirror of breaking)
+                if (tickPlacing(player, options)) {
+                        return;
+                }
+                // DID WE ACTUALLY GET THERE? Nothing ever asked.
+                // A path replayed to its end frees the executor (isRunning() is false once
+                // tick > path.size()), the near-goal branch sees "not busy" and orders another
+                // search, and the loop closes. Measured across a five-run sweep, the failing run
+                // had pdNearBusy=1455 / pdNearFind=385 against 304 / 62 in the best one -- five
+                // times as many paths run out. Count arrival against the path's own last cell
+                // before declaring the segment finished, so the two outcomes stop looking alike.
+                try {
+                        net.minecraft.util.math.Vec3d last = this.path.get(this.path.size() - 1)
+                                        .agent.getPos();
+                        double dx = player.getX() - last.x, dy = player.getY() - last.y,
+                                        dz = player.getZ() - last.z;
+                        // TELEMETRY ONLY (audit angle 7): this 1.5-block bucket classifies the
+                        // segment end for the execArrived/execRanOut counters. It is NOT an
+                        // arrival gate — do not wire behaviour to it; the real gates live in
+                        // PathTolerances (emit gate / goto retry / navigator sphere).
+                        if (dx * dx + dy * dy + dz * dz <= PathTolerances.SEGMENT_END_TELEMETRY_SQ) execArrived++; else execRanOut++;
+                } catch (Throwable ignored) { execRanOut++; }
+                long endTime = System.currentTimeMillis();
+                long elapsedTime = endTime - startTime;
+                long minutes = (elapsedTime / 1000) / 60;
             long seconds = (elapsedTime / 1000) % 60;
             long milliseconds = elapsedTime % 1000;
 
@@ -574,148 +578,148 @@ public class PathExecutor {
                     || this.path.size() > 1 || elapsedTime >= 1000) {
                 Debug.logMessage("Time taken to execute: " + minutes + " minutes, " + seconds + " seconds, " + milliseconds + " milliseconds");
             }
-    		
-		    options.forwardKey.setPressed(false);
-		    options.backKey.setPressed(false);
-		    options.leftKey.setPressed(false);
-		    options.rightKey.setPressed(false);
-		    options.jumpKey.setPressed(false);
-		    options.sneakKey.setPressed(false);
-		    options.sprintKey.setPressed(false);
-		    this.path = null;
-		    stop = false;
-		    TungstenModRenderContainer.RUNNING_PATH_RENDERER.clear();
-		    TungstenModRenderContainer.BLOCK_PATH_RENDERER.clear();
-		    if (cb != null) {
-		    	cb.run();
-		    	cb = null;
-		    }
-	    } else {
-		    // ⛔ BARITONE'S costVerificationLookahead, FOR A REPLAY (G108 nether, 2026-09-23). The
-		    // physics search prunes lava states (Node.java), so the PLAN is lava-free -- but this
-		    // executor REPLAYS recorded inputs, and a body that has drifted from the simulated
-		    // trajectory is not where the plan was checked. Measured: after the walker was gated,
-		    // the next nether lava entry came under this executor (driver exec1). Baritone's
-		    // PathExecutor re-costs the current and next movements every tick and cancels on an
-		    // impossible one (PathExecutor.java:196-210); here the next half-second of the replay
-		    // -- body to node, node to node -- is checked against the same RouteHazards the planners
-		    // use. Only while on the ground: that is when a cancel can still change where the body
-		    // goes (baritone's safeToCancel), and mid-arc it would only drop the keys.
-		    if (player.isOnGround() && motionAheadLethal(player)) {
-		        execMotionLethal++;
-		        kaptainwutax.tungsten.path.RouteHazards.refusedExecutor++;
-		        Debug.logMessage("Path stopped: the body is heading into a lethal column (off the plan) -- replanning");
-		        stop = true;
-		        options.forwardKey.setPressed(false);
-		        options.sprintKey.setPressed(false);
-		        options.jumpKey.setPressed(false);
-		        return;
-		    }
-		    if (player.isOnGround() && replayAheadLethal(player)) {
-		        kaptainwutax.tungsten.path.RouteHazards.refusedExecutor++;
-		        Debug.logMessage("Path stopped: the next steps of the replay are lethal (hazard) -- replanning");
-		        stop = true;
-		        options.forwardKey.setPressed(false);
-		        options.sprintKey.setPressed(false);
-		        options.jumpKey.setPressed(false);
-		        return;
-		    }
-		    Node node = this.path.get(this.tick);
+                
+                    options.forwardKey.setPressed(false);
+                    options.backKey.setPressed(false);
+                    options.leftKey.setPressed(false);
+                    options.rightKey.setPressed(false);
+                    options.jumpKey.setPressed(false);
+                    options.sneakKey.setPressed(false);
+                    options.sprintKey.setPressed(false);
+                    this.path = null;
+                    stop = false;
+                    TungstenModRenderContainer.RUNNING_PATH_RENDERER.clear();
+                    TungstenModRenderContainer.BLOCK_PATH_RENDERER.clear();
+                    if (cb != null) {
+                        cb.run();
+                        cb = null;
+                    }
+            } else {
+                    // ⛔ BARITONE'S costVerificationLookahead, FOR A REPLAY (G108 nether, 2026-09-23). The
+                    // physics search prunes lava states (Node.java), so the PLAN is lava-free -- but this
+                    // executor REPLAYS recorded inputs, and a body that has drifted from the simulated
+                    // trajectory is not where the plan was checked. Measured: after the walker was gated,
+                    // the next nether lava entry came under this executor (driver exec1). Baritone's
+                    // PathExecutor re-costs the current and next movements every tick and cancels on an
+                    // impossible one (PathExecutor.java:196-210); here the next half-second of the replay
+                    // -- body to node, node to node -- is checked against the same RouteHazards the planners
+                    // use. Only while on the ground: that is when a cancel can still change where the body
+                    // goes (baritone's safeToCancel), and mid-arc it would only drop the keys.
+                    if (player.isOnGround() && motionAheadLethal(player)) {
+                        execMotionLethal++;
+                        kaptainwutax.tungsten.path.RouteHazards.refusedExecutor++;
+                        Debug.logMessage("Path stopped: the body is heading into a lethal column (off the plan) -- replanning");
+                        stop = true;
+                        options.forwardKey.setPressed(false);
+                        options.sprintKey.setPressed(false);
+                        options.jumpKey.setPressed(false);
+                        return;
+                    }
+                    if (player.isOnGround() && replayAheadLethal(player)) {
+                        kaptainwutax.tungsten.path.RouteHazards.refusedExecutor++;
+                        Debug.logMessage("Path stopped: the next steps of the replay are lethal (hazard) -- replanning");
+                        stop = true;
+                        options.forwardKey.setPressed(false);
+                        options.sprintKey.setPressed(false);
+                        options.jumpKey.setPressed(false);
+                        return;
+                    }
+                    Node node = this.path.get(this.tick);
 
-		    // Drift detection is handled post-tick in MixinClientPlayerEntity.end()
-		    // via Agent.compare() — it correctly compares AFTER vanilla processes
-		    // the inputs, so the positions are comparable.
+                    // Drift detection is handled post-tick in MixinClientPlayerEntity.end()
+                    // via Agent.compare() — it correctly compares AFTER vanilla processes
+                    // the inputs, so the positions are comparable.
 
-		    if(node.input != null) {
-			    float targetYaw = node.input.yaw;
-			    float targetPitch = TungstenConfig.get().enablePitchChange
-			            ? calculateLookAheadPitch(node)
-			            : node.input.pitch;
+                    if(node.input != null) {
+                            float targetYaw = node.input.yaw;
+                            float targetPitch = TungstenConfig.get().enablePitchChange
+                                    ? calculateLookAheadPitch(node)
+                                    : node.input.pitch;
 
-			    // WHO OWNS THE CAMERA WHILE AN ARROW IS ON THE STRING.
-			    //
-			    // This block drives the yaw to the MOVEMENT direction on every replayed tick, and
-			    // BowShooter releases only when |sol.yaw - player.getYaw()| < 3.5 degrees. So while
-			    // a path is replaying, movement overwrites the aim every tick and the draw can
-			    // never converge: measured on bow_flee with the shot counter, ONE arrow loosed out
-			    // of ~20 requested, the other nineteen timing out at 100 ticks as "Bow shot
-			    // aborted". The single success came in a hold-position window, which is exactly
-			    // when RunAwayTask stops pathing (dist >= keepDistance + 1.5).
-			    //
-			    // It is also why ranged_moving is GREEN and bow_flee is not: there the BOT stands
-			    // still and only the target moves, so no path replay is fighting the aim.
-			    //
-			    // A player solves this by facing the target and travelling on the strafe keys. So
-			    // does this: while a draw is live the aim keeps the camera, and the movement keys
-			    // are re-expressed from the planner's yaw frame into the one the bot is actually
-			    // facing, which preserves the WORLD-SPACE direction of travel. Gated on
-			    // BowShooter.isActive(), so ordinary navigation is byte-for-byte unchanged.
-			    // FOR THE WHOLE DRAW, NOT JUST THE END OF IT — TRIED THE NARROW VERSION AND IT
-			    // MEASURED WORSE. Reasoning that facing the target costs the sprint (vanilla only
-			    // sprints while moving FORWARD), I gated this on BowShooter.isAimCritical(), the
-			    // last few ticks before release, expecting the distance back. It halved the shots
-			    // and returned nothing:
-			    //     whole draw   bowShots 5 / 5 / 3    avg_dist 4.95 / 6.51 / 6.02
-			    //     last ticks   bowShots 2            avg_dist 5.98
-			    // So the sprint story does not explain the distance, and isAimCritical stays in
-			    // BowShooter unused-by-this-path rather than being wired on a hunch.
-			    // AND THE SAME ARGUMENT APPLIES TO A PICKAXE. The miner stamps minerAimUntilMs while it
-			    // aims at a block; until now nothing on this path read it, so the line below re-pointed the
-			    // camera at the next waypoint in the very tick the miner had aimed at the block. Yield the
-			    // camera and reframe the keys -- travel direction is preserved in world space.
-			    boolean minerAim = TungstenConfig.get().executorYieldsAimToMiner
-			            && kaptainwutax.tungsten.TungstenModDataContainer.minerOwnsAim();
-			    if (minerAim) execYieldMiner++;
-			    boolean aiming = kaptainwutax.tungsten.task.BowShooter.isActive() || minerAim;
-			    boolean fwd = node.input.forward, back = node.input.back;
-			    boolean left = node.input.left, right = node.input.right;
+                            // WHO OWNS THE CAMERA WHILE AN ARROW IS ON THE STRING.
+                            //
+                            // This block drives the yaw to the MOVEMENT direction on every replayed tick, and
+                            // BowShooter releases only when |sol.yaw - player.getYaw()| < 3.5 degrees. So while
+                            // a path is replaying, movement overwrites the aim every tick and the draw can
+                            // never converge: measured on bow_flee with the shot counter, ONE arrow loosed out
+                            // of ~20 requested, the other nineteen timing out at 100 ticks as "Bow shot
+                            // aborted". The single success came in a hold-position window, which is exactly
+                            // when RunAwayTask stops pathing (dist >= keepDistance + 1.5).
+                            //
+                            // It is also why ranged_moving is GREEN and bow_flee is not: there the BOT stands
+                            // still and only the target moves, so no path replay is fighting the aim.
+                            //
+                            // A player solves this by facing the target and travelling on the strafe keys. So
+                            // does this: while a draw is live the aim keeps the camera, and the movement keys
+                            // are re-expressed from the planner's yaw frame into the one the bot is actually
+                            // facing, which preserves the WORLD-SPACE direction of travel. Gated on
+                            // BowShooter.isActive(), so ordinary navigation is byte-for-byte unchanged.
+                            // FOR THE WHOLE DRAW, NOT JUST THE END OF IT — TRIED THE NARROW VERSION AND IT
+                            // MEASURED WORSE. Reasoning that facing the target costs the sprint (vanilla only
+                            // sprints while moving FORWARD), I gated this on BowShooter.isAimCritical(), the
+                            // last few ticks before release, expecting the distance back. It halved the shots
+                            // and returned nothing:
+                            //     whole draw   bowShots 5 / 5 / 3    avg_dist 4.95 / 6.51 / 6.02
+                            //     last ticks   bowShots 2            avg_dist 5.98
+                            // So the sprint story does not explain the distance, and isAimCritical stays in
+                            // BowShooter unused-by-this-path rather than being wired on a hunch.
+                            // AND THE SAME ARGUMENT APPLIES TO A PICKAXE. The miner stamps minerAimUntilMs while it
+                            // aims at a block; until now nothing on this path read it, so the line below re-pointed the
+                            // camera at the next waypoint in the very tick the miner had aimed at the block. Yield the
+                            // camera and reframe the keys -- travel direction is preserved in world space.
+                            boolean minerAim = TungstenConfig.get().executorYieldsAimToMiner
+                                    && kaptainwutax.tungsten.TungstenModDataContainer.minerOwnsAim();
+                            if (minerAim) execYieldMiner++;
+                            boolean aiming = kaptainwutax.tungsten.task.BowShooter.isActive() || minerAim;
+                            boolean fwd = node.input.forward, back = node.input.back;
+                            boolean left = node.input.left, right = node.input.right;
 
-			    if (aiming) {
-			        float[] keys = reframeMovement(node.input, player.getYaw());
-			        fwd = keys[0] > 0.35f;
-			        back = keys[0] < -0.35f;
-			        right = keys[1] > 0.35f;
-			        left = keys[1] < -0.35f;
-			    } else if (TungstenConfig.get().enableNativeRotation) {
-			        applyNativeRotation(player, targetYaw, targetPitch);
-			    } else {
-			        player.setYaw(targetYaw);
-			        player.setPitch(targetPitch);
-			    }
-			    // player.stopGliding() removed in MC 1.21
-	    		options.forwardKey.setPressed(fwd);
-			    options.backKey.setPressed(back);
-			    options.leftKey.setPressed(left);
-			    options.rightKey.setPressed(right);
-			    options.jumpKey.setPressed(node.input.jump);
-			    options.sneakKey.setPressed(node.input.sneak);
-			    options.sprintKey.setPressed(node.input.sprint);
-			    // HOW MUCH OF A JOURNEY IS ACTUALLY SPRINTED — never counted until now, and it is
-			    // the quantity every "the bot is too slow" reading has been assuming. The sprint
-			    // comes from the PATH NODE, i.e. from SprintPolicy during move generation; the
-			    // executor only replays it. On bow_flee the bot paths 80% of the run, faces its
-			    // pursuer 14%, and STILL cannot pull away from a chaser the course afflicted with
-			    // slowness — so either those ticks sprint and the explanation lies elsewhere, or
-			    // they do not and three mechanisms were chased tonight for nothing.
-			    execTicks++;
-			    if (node.input.sprint) execSprintTicks++;
-		    }
-//		    if(this.tick != 0 && options != null) {
-//			    this.path.get(this.tick - 1).agent.compare(player, optionsToPlayerInput(options), true);
-//		    }
-		    int idx = TungstenModRenderContainer.RUNNING_PATH_RENDERER.size()-1;
-		    if (!TungstenModRenderContainer.RUNNING_PATH_RENDERER.isEmpty() && this.tick != 0) {
-		    	try {
-			    	TungstenModRenderContainer.RUNNING_PATH_RENDERER.remove(TungstenModRenderContainer.RUNNING_PATH_RENDERER.toArray()[idx]);
-			    	if (TungstenMod.renderPositonBoxes && TungstenModRenderContainer.RUNNING_PATH_RENDERER.size() > 1) {
-			    		TungstenModRenderContainer.RUNNING_PATH_RENDERER.remove(TungstenModRenderContainer.RUNNING_PATH_RENDERER.toArray()[idx-1]);
-			    	}
-				} catch (Exception e) {
-					// TODO: handle exception
-				}
-		    }
-	    }
-	    this.tick++;
+                            if (aiming) {
+                                float[] keys = reframeMovement(node.input, player.getYaw());
+                                fwd = keys[0] > 0.35f;
+                                back = keys[0] < -0.35f;
+                                right = keys[1] > 0.35f;
+                                left = keys[1] < -0.35f;
+                            } else if (TungstenConfig.get().enableNativeRotation) {
+                                applyNativeRotation(player, targetYaw, targetPitch);
+                            } else {
+                                player.setYaw(targetYaw);
+                                player.setPitch(targetPitch);
+                            }
+                            // player.stopGliding() removed in MC 1.21
+                        options.forwardKey.setPressed(fwd);
+                            options.backKey.setPressed(back);
+                            options.leftKey.setPressed(left);
+                            options.rightKey.setPressed(right);
+                            options.jumpKey.setPressed(node.input.jump);
+                            options.sneakKey.setPressed(node.input.sneak);
+                            options.sprintKey.setPressed(node.input.sprint);
+                            // HOW MUCH OF A JOURNEY IS ACTUALLY SPRINTED — never counted until now, and it is
+                            // the quantity every "the bot is too slow" reading has been assuming. The sprint
+                            // comes from the PATH NODE, i.e. from SprintPolicy during move generation; the
+                            // executor only replays it. On bow_flee the bot paths 80% of the run, faces its
+                            // pursuer 14%, and STILL cannot pull away from a chaser the course afflicted with
+                            // slowness — so either those ticks sprint and the explanation lies elsewhere, or
+                            // they do not and three mechanisms were chased tonight for nothing.
+                            execTicks++;
+                            if (node.input.sprint) execSprintTicks++;
+                    }
+//                  if(this.tick != 0 && options != null) {
+//                          this.path.get(this.tick - 1).agent.compare(player, optionsToPlayerInput(options), true);
+//                  }
+                    int idx = TungstenModRenderContainer.RUNNING_PATH_RENDERER.size()-1;
+                    if (!TungstenModRenderContainer.RUNNING_PATH_RENDERER.isEmpty() && this.tick != 0) {
+                        try {
+                                TungstenModRenderContainer.RUNNING_PATH_RENDERER.remove(TungstenModRenderContainer.RUNNING_PATH_RENDERER.toArray()[idx]);
+                                if (TungstenMod.renderPositonBoxes && TungstenModRenderContainer.RUNNING_PATH_RENDERER.size() > 1) {
+                                        TungstenModRenderContainer.RUNNING_PATH_RENDERER.remove(TungstenModRenderContainer.RUNNING_PATH_RENDERER.toArray()[idx-1]);
+                                }
+                                } catch (Exception e) {
+                                        // TODO: handle exception
+                                }
+                    }
+            }
+            this.tick++;
     }
 
 
@@ -1735,7 +1739,7 @@ public class PathExecutor {
     }
 
     public static TungstenPlayerInput optionsToPlayerInput(GameOptions options) {
-    	return new TungstenPlayerInput(options.forwardKey.isPressed(), options.backKey.isPressed(), options.leftKey.isPressed(), options.rightKey.isPressed(), options.jumpKey.isPressed(), options.sneakKey.isPressed(), options.sprintKey.isPressed());
+        return new TungstenPlayerInput(options.forwardKey.isPressed(), options.backKey.isPressed(), options.leftKey.isPressed(), options.rightKey.isPressed(), options.jumpKey.isPressed(), options.sneakKey.isPressed(), options.sprintKey.isPressed());
     }
 
 

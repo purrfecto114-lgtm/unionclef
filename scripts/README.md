@@ -42,8 +42,10 @@ bot = gw.entry_point
 
 ```python
 bot.ChatMessage("@goto 0 64 0")       # altoclef command
-bot.ChatMessage("#goto 0 64 0")       # baritone/shredder command
 bot.ChatMessage(";goto 100 64 100")   # tungsten command
+# NOTE: the legacy "#" prefix (old baritone/shredder commands) was retired in the
+# G-0 migration (2026-08-24). Nothing in the build handles "#" any more — use "@"
+# for altoclef and ";" for tungsten.
 bot.ChatMessage("/warp park")         # server command
 bot.ChatMessage("gg")                 # plain chat message
 ```
@@ -97,4 +99,4 @@ Output files (`result.txt`, etc.) are also gitignored.
 
 - Chat messages from the server come back via `onStrongChatMessage()` / `onWeakChatMessage()` callbacks
 - The message queue has throttling to avoid kicks — if you need instant delivery, use `ExecuteCommand()` for altoclef commands
-- For tungsten/baritone commands, `ChatMessage()` is the only way (they intercept the chat pipeline)
+- For tungsten commands (`;` prefix), `ChatMessage()` is the only way (tungsten intercepts the chat pipeline). The old baritone/shredder `#` commands no longer exist since G-0.

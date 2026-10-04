@@ -28,9 +28,9 @@ public class WindMouseRotation {
     public static final WindMouseRotation INSTANCE = new WindMouseRotation();
 
     /** Frame time the per-frame tuning above was written against: 20 fps, the tick rate. */
-    private static final double REF_FRAME_MS = 50.0;
+    public static final double REF_FRAME_MS = 50.0;
     /** Most a single starved frame may claim, so a hitch cannot become a teleport. */
-    private static final double MAX_CATCHUP = 4.0;
+    public static final double MAX_CATCHUP = 4.0;
     /** When the last aim step ran, for measuring the frame in milliseconds. */
     private long lastStepMs = 0L;
 

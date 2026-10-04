@@ -7,7 +7,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.world.World;
 
 public class TungstenModDataContainer {
-	public static PlayerEntity player;
+        public static PlayerEntity player;
     public static final boolean LOG_DEBUG_DATA = false;
     public static PathExecutor EXECUTOR;
 
@@ -61,22 +61,32 @@ public class TungstenModDataContainer {
                 || kaptainwutax.tungsten.task.BridgeTask.isActive();
     }
 
-	public static PathFinder PATHFINDER = new PathFinder();
+        public static PathFinder PATHFINDER = new PathFinder();
 
     /** Safe check — EXECUTOR may be null before TungstenMod.onInitializeClient */
     public static boolean isExecutorRunning() {
         return EXECUTOR != null && EXECUTOR.isRunning();
     }
-	public static World world;
+        public static World world;
+    /**
+     * Upstream tungsten's {@code ;settings ignoreFallDamage} flag — "the user declares falls
+     * acceptable". ⚠️ It does NOT mean "the fall guard is off": with the shipped default
+     * {@code pathAvoidsFallDamage=true} (TungstenConfig) the guard still runs. Ask
+     * {@link #searchIgnoresFallDamage()}, never this raw field. Decision logic + truth table:
+     * {@link kaptainwutax.tungsten.path.FallDamagePolicy} (tested).
+     */
     public static boolean ignoreFallDamage = true;
 
     /**
      * Does the SEARCH get to ignore fall damage? Ask this, never the raw field.
      *
-     * <p>⛔ The field above is {@code true} by default, which switches off a fall-damage guard that
-     * is otherwise complete and correct: PathFinder.checkForFallDamage walks the parent chain,
-     * rejects any segment steeper than 2.75 blocks, and already exempts water, slime columns and
-     * slime bounces. All of it sits behind an early return that is taken on every search.
+     * <p>HISTORY, corrected 2026-10-04: the paragraph below used to claim the early return
+     * "is taken on every search" because ignoreFallDamage defaults to true. That was true
+     * before 2026-08-23 and is NO LONGER TRUE: {@code pathAvoidsFallDamage=true} shipped
+     * (with its own A/B gate — see the SHIPPED ON note in TungstenConfig), so with today's
+     * defaults {@code ignoreFallDamage && !pathAvoidsFallDamage == false} and the guard is
+     * ACTIVE. The audit of 2026-10-03 was misled by the same stale sentence. The measured
+     * history that motivated the flag is kept for context:
      *
      * <p>Measured on the playthrough, 2026-08-18: the bot descends from y=134 to y=60 and takes
      * 25.3 damage, of which the damage witness attributes FOUR events out of four to no living
@@ -90,10 +100,11 @@ public class TungstenModDataContainer {
      * as a course that hands the bot a weapon already in its hand.
      *
      * <p>Flagged rather than flipped, so the two arms can be interleaved: pathAvoidsFallDamage=true
-     * turns the guard ON. Default stays OFF until the measurement says otherwise.
+     * turns the guard ON, which is now the shipped default.
      */
     public static boolean searchIgnoresFallDamage() {
-        return fallGuardRelaxed || (ignoreFallDamage && !TungstenConfig.get().pathAvoidsFallDamage);
+        return kaptainwutax.tungsten.path.FallDamagePolicy.searchIgnoresFallDamage(
+                fallGuardRelaxed, ignoreFallDamage, TungstenConfig.get().pathAvoidsFallDamage);
     }
 
     /**

@@ -415,7 +415,9 @@ public class UnstuckChain extends SingleTaskChain {
         double dz = Math.abs(current.getZ() - old.getZ());
         double dy = Math.abs(current.getY() - old.getY());
 
-        if (dx < 1.5 && dz < 1.5 && dy < 1.5) {
+        if (dx < kaptainwutax.tungsten.path.PathTolerances.STUCK_AXIS
+                && dz < kaptainwutax.tungsten.path.PathTolerances.STUCK_AXIS
+                && dy < kaptainwutax.tungsten.path.PathTolerances.STUCK_AXIS) {
             // Cooldown check: don't re-trigger shimmy too frequently (issue #13)
             if (!stuckCooldown.elapsed()) {
                 posHistory.clear();
